@@ -25,6 +25,12 @@ function App() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>(
     {},
   )
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    businessName: '',
+  })
 
   const problems = [
     'After-hours calls go unanswered while competitors book the job',
@@ -85,11 +91,15 @@ function App() {
 
   const isAssessmentComplete =
     Object.keys(selectedAnswers).length === assessmentQuestions.length
+  const isContactComplete = Object.values(contactForm).every(
+    (value) => value.trim().length > 0,
+  )
+  const canBookAudit = isAssessmentComplete && isContactComplete
 
   const handleAssessmentBooking = async (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
 
-    if (!isAssessmentComplete) {
+    if (!canBookAudit) {
       return
     }
 
@@ -103,8 +113,19 @@ function App() {
       'speed',
       responseSpeedParams[selectedAnswers[2]] ?? selectedAnswers[2],
     )
+    calendlyUrl.searchParams.set('name', contactForm.name.trim())
+    calendlyUrl.searchParams.set('email', contactForm.email.trim())
+    calendlyUrl.searchParams.set('phone', contactForm.phone.trim())
+    calendlyUrl.searchParams.set(
+      'business_name',
+      contactForm.businessName.trim(),
+    )
 
     const { error } = await supabase.from('leads').insert({
+      name: contactForm.name.trim(),
+      email: contactForm.email.trim(),
+      phone: contactForm.phone.trim(),
+      business_name: contactForm.businessName.trim(),
       service_type: selectedAnswers[0],
       lead_source: selectedAnswers[1],
       response_speed: selectedAnswers[2],
@@ -451,17 +472,102 @@ function App() {
             ))}
           </div>
 
+          <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/10">
+            <div className="mb-5">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                Your contact details
+              </p>
+              <h3 className="mt-2 text-xl font-bold text-white">
+                Where should we send your automation plan?
+              </h3>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">
+                  Name
+                </span>
+                <input
+                  type="text"
+                  value={contactForm.name}
+                  onChange={(event) =>
+                    setContactForm((currentForm) => ({
+                      ...currentForm,
+                      name: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-5 py-4 text-base font-semibold text-white outline-none transition-all duration-200 placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-300/30"
+                  placeholder="Your name"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">
+                  Email
+                </span>
+                <input
+                  type="email"
+                  value={contactForm.email}
+                  onChange={(event) =>
+                    setContactForm((currentForm) => ({
+                      ...currentForm,
+                      email: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-5 py-4 text-base font-semibold text-white outline-none transition-all duration-200 placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-300/30"
+                  placeholder="you@company.com"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">
+                  Phone
+                </span>
+                <input
+                  type="tel"
+                  value={contactForm.phone}
+                  onChange={(event) =>
+                    setContactForm((currentForm) => ({
+                      ...currentForm,
+                      phone: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-5 py-4 text-base font-semibold text-white outline-none transition-all duration-200 placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-300/30"
+                  placeholder="(555) 123-4567"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">
+                  Business name
+                </span>
+                <input
+                  type="text"
+                  value={contactForm.businessName}
+                  onChange={(event) =>
+                    setContactForm((currentForm) => ({
+                      ...currentForm,
+                      businessName: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-5 py-4 text-base font-semibold text-white outline-none transition-all duration-200 placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-300/30"
+                  placeholder="Company name"
+                />
+              </label>
+            </div>
+          </div>
+
           <div className="mt-12 text-center">
             <p
               className={`mb-5 text-sm font-medium transition-opacity duration-200 ${
-                isAssessmentComplete
+                canBookAudit
                   ? 'text-cyan-100 opacity-100'
                   : 'text-slate-500 opacity-70'
               }`}
             >
-              {isAssessmentComplete
+              {canBookAudit
                 ? "Based on your answers, you're likely missing qualified jobs each week."
-                : 'Answer all 3 questions to unlock your free plan.'}
+                : 'Answer all questions and add your contact details to unlock your free plan.'}
             </p>
             <p className="mb-5 text-sm font-medium text-slate-400">
               Most teams who see this wish they fixed it sooner.
@@ -477,9 +583,9 @@ function App() {
             >
               <button
                 type="button"
-                disabled={!isAssessmentComplete}
+                disabled={!canBookAudit}
                 className={`rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
-                  isAssessmentComplete
+                  canBookAudit
                     ? 'hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-xl hover:shadow-cyan-400/35'
                     : 'cursor-not-allowed opacity-50'
                 }`}
