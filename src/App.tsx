@@ -26,6 +26,21 @@ function App() {
     },
   ]
 
+  const assessmentQuestions = [
+    {
+      question: 'What type of service business do you run?',
+      options: ['HVAC', 'Plumbing', 'Electrical'],
+    },
+    {
+      question: 'How do you currently handle new leads?',
+      options: ['Phone calls', 'Website forms', 'Calls and forms'],
+    },
+    {
+      question: 'Do you ever miss calls or respond late?',
+      options: ['Yes, often', 'Sometimes', 'Not sure'],
+    },
+  ]
+
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 text-white">
       <section className="relative flex min-h-screen items-center justify-center px-6 py-20">
@@ -287,6 +302,67 @@ function App() {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="contact"
+        className="relative border-t border-white/10 bg-slate-950 px-6 py-20 sm:py-24"
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#0e7490_0%,transparent_28%)] opacity-20" />
+
+        <div className="relative mx-auto max-w-5xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+              Quick lead capture assessment
+            </p>
+            <h2 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
+              See if this would work for your business
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-slate-300">
+              Answer a few quick questions so we can see where leads are being
+              missed and what kind of automation would help you book more jobs.
+            </p>
+          </div>
+
+          <div className="mt-12 space-y-5">
+            {assessmentQuestions.map((item, index) => (
+              <div
+                key={item.question}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/10"
+              >
+                <div className="mb-5 flex items-start gap-4">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-sm font-bold text-cyan-200">
+                    {index + 1}
+                  </span>
+                  <h3 className="pt-1 text-xl font-bold text-white">
+                    {item.question}
+                  </h3>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {item.options.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className="rounded-xl border border-white/10 bg-slate-900/70 px-5 py-4 text-left text-base font-semibold text-slate-200 transition hover:border-cyan-300/50 hover:bg-cyan-400/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-10 flex justify-center">
+            <a
+              href="#contact"
+              className="rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
+            >
+              Continue to Booking
+            </a>
           </div>
         </div>
       </section>
