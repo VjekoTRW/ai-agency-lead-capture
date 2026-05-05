@@ -47,6 +47,9 @@ function App() {
     },
   ]
 
+  const isAssessmentComplete =
+    Object.keys(selectedAnswers).length === assessmentQuestions.length
+
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 text-white">
       <section className="relative flex min-h-screen items-center justify-center px-6 py-20">
@@ -339,7 +342,7 @@ function App() {
             </p>
           </div>
 
-          <div className="mt-12 space-y-5">
+          <div className="mt-10 space-y-4">
             {assessmentQuestions.map((item, index) => (
               <div
                 key={item.question}
@@ -366,9 +369,9 @@ function App() {
                           [index]: option,
                         }))
                       }
-                      className={`rounded-xl border px-5 py-4 text-left text-base font-semibold transition focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+                      className={`rounded-xl border px-5 py-4 text-left text-base font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
                         selectedAnswers[index] === option
-                          ? 'border-cyan-400 bg-cyan-400/15 text-white shadow-lg shadow-cyan-400/10'
+                          ? 'scale-[1.02] border-cyan-400 bg-cyan-400/15 text-white shadow-lg shadow-cyan-400/10 brightness-110'
                           : 'border-white/10 bg-slate-900/70 text-slate-200 hover:border-cyan-300/50 hover:bg-cyan-400/10 hover:text-white'
                       }`}
                     >
@@ -380,13 +383,29 @@ function App() {
             ))}
           </div>
 
-          <div className="mt-14 flex justify-center">
-            <a
-              href="#contact"
-              className="rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
+          <div className="mt-12 text-center">
+            <p
+              className={`mb-5 text-sm font-medium transition-opacity duration-200 ${
+                isAssessmentComplete
+                  ? 'text-cyan-100 opacity-100'
+                  : 'text-slate-500 opacity-70'
+              }`}
             >
-              See If This Can Work For Me
-            </a>
+              {isAssessmentComplete
+                ? 'Based on your answers, this could be a strong fit.'
+                : 'Answer all 3 questions to unlock your free plan.'}
+            </p>
+            <button
+              type="button"
+              disabled={!isAssessmentComplete}
+              className={`rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+                isAssessmentComplete
+                  ? 'hover:bg-cyan-300'
+                  : 'cursor-not-allowed opacity-50'
+              }`}
+            >
+              Get My Free Automation Plan
+            </button>
           </div>
           <p className="mt-4 text-center text-sm font-medium text-slate-400">
             No pressure &bull; Just a quick call to see if it fits
