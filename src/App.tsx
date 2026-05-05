@@ -1,14 +1,29 @@
 function App() {
   const problems = [
-    'Missed calls',
-    'Slow follow-up',
-    'Lost leads',
+    'After-hours calls go unanswered while competitors book the job',
+    'Quote requests wait hours before anyone follows up',
+    'High-intent leads disappear before your team can respond',
   ]
 
   const solutions = [
-    'Instant AI responses',
-    'Automated lead capture',
-    'More booked jobs',
+    'Every inquiry gets a fast reply, even nights and weekends',
+    'New leads are captured, qualified, and routed without manual chasing',
+    'More emergency calls and estimates turn into scheduled jobs',
+  ]
+
+  const trustPoints = [
+    {
+      title: 'Fast setup',
+      text: 'Launch a lead response system around your existing calls, forms, and follow-up process.',
+    },
+    {
+      title: 'No extra staff needed',
+      text: 'Handle more inbound demand without hiring another dispatcher or office admin.',
+    },
+    {
+      title: 'Proven service workflows',
+      text: 'Built around the way HVAC, plumbing, and electrical customers actually request help.',
+    },
   ]
 
   return (
@@ -69,8 +84,8 @@ function App() {
               Built for local service teams
             </p>
             <h2 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
-              Turn every service inquiry into a faster response and a clearer
-              path to the calendar.
+              Missed calls and slow follow-up are quietly costing you booked
+              jobs every week.
             </h2>
           </div>
 
@@ -98,7 +113,7 @@ function App() {
                     The problem
                   </p>
                   <h3 className="mt-1 text-2xl font-bold text-white">
-                    Leads slip away fast
+                    Revenue leaks between calls
                   </h3>
                 </div>
               </div>
@@ -154,7 +169,7 @@ function App() {
                     The solution
                   </p>
                   <h3 className="mt-1 text-2xl font-bold text-white">
-                    AI captures demand instantly
+                    More demand reaches your calendar
                   </h3>
                 </div>
               </div>
@@ -185,6 +200,87 @@ function App() {
                   </li>
                 ))}
               </ul>
+            </div>
+          </div>
+
+          <div className="mt-10">
+            <a
+              href="#contact"
+              className="inline-flex items-center text-base font-semibold text-cyan-200 transition hover:text-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
+            >
+              See how this works for your business
+              <span className="ml-2" aria-hidden="true">
+                -&gt;
+              </span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section className="relative border-t border-white/10 bg-slate-900 px-6 py-20 sm:py-24">
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,#020617_0%,#0f172a_52%,#111827_100%)] opacity-70" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
+
+        <div className="relative mx-auto max-w-6xl">
+          <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+            <div>
+              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                Trust built in
+              </p>
+              <h2 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
+                Built for real service businesses that need jobs booked, not
+                more software to manage.
+              </h2>
+              <p className="mt-6 text-lg leading-8 text-slate-300">
+                Your team stays focused on the work in the field while AI helps
+                capture demand, follow up quickly, and keep revenue from
+                slipping through the cracks.
+              </p>
+            </div>
+
+            <div className="grid gap-4">
+              {trustPoints.map((point) => (
+                <div
+                  key={point.title}
+                  className="flex gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl shadow-black/10"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-200">
+                    <svg
+                      aria-hidden="true"
+                      className="h-5 w-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2.25"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                      />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">
+                      {point.title}
+                    </h3>
+                    <p className="mt-1 leading-7 text-slate-300">
+                      {point.text}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.06] p-6">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                  Early client results
+                </p>
+                <p className="mt-3 text-xl font-semibold leading-8 text-white">
+                  Service teams use this system to respond faster after hours,
+                  recover more web leads, and turn missed opportunities into
+                  booked estimates.
+                </p>
+              </div>
             </div>
           </div>
         </div>
