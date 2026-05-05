@@ -1,4 +1,16 @@
 function App() {
+  const problems = [
+    'Missed calls',
+    'Slow follow-up',
+    'Lost leads',
+  ]
+
+  const solutions = [
+    'Instant AI responses',
+    'Automated lead capture',
+    'More booked jobs',
+  ]
+
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 text-white">
       <section className="relative flex min-h-screen items-center justify-center px-6 py-20">
@@ -41,6 +53,139 @@ function App() {
             <span>Instant SMS follow-up</span>
             <span className="hidden h-1 w-1 rounded-full bg-cyan-300/70 sm:block" />
             <span>No missed revenue</span>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="services"
+        className="relative border-t border-white/10 bg-slate-950 px-6 py-20 sm:py-24"
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,#0891b2_0%,transparent_30%)] opacity-20" />
+
+        <div className="relative mx-auto max-w-6xl">
+          <div className="mb-12 max-w-3xl">
+            <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+              Built for local service teams
+            </p>
+            <h2 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
+              Turn every service inquiry into a faster response and a clearer
+              path to the calendar.
+            </h2>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border border-red-400/20 bg-white/[0.03] p-6 shadow-2xl shadow-black/20 sm:p-8">
+              <div className="mb-8 flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-400/10 text-red-300">
+                  <svg
+                    aria-hidden="true"
+                    className="h-6 w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-red-200">
+                    The problem
+                  </p>
+                  <h3 className="mt-1 text-2xl font-bold text-white">
+                    Leads slip away fast
+                  </h3>
+                </div>
+              </div>
+
+              <ul className="space-y-4">
+                {problems.map((problem) => (
+                  <li
+                    key={problem}
+                    className="flex items-center gap-4 rounded-xl border border-white/10 bg-slate-900/60 p-4 text-lg font-semibold text-slate-200"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-400/10 text-red-300">
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="m6 18 12-12M6 6l12 12"
+                        />
+                      </svg>
+                    </span>
+                    {problem}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-cyan-400/25 bg-cyan-400/[0.04] p-6 shadow-2xl shadow-cyan-950/20 sm:p-8">
+              <div className="mb-8 flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-200">
+                  <svg
+                    aria-hidden="true"
+                    className="h-6 w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                    The solution
+                  </p>
+                  <h3 className="mt-1 text-2xl font-bold text-white">
+                    AI captures demand instantly
+                  </h3>
+                </div>
+              </div>
+
+              <ul className="space-y-4">
+                {solutions.map((solution) => (
+                  <li
+                    key={solution}
+                    className="flex items-center gap-4 rounded-xl border border-cyan-300/15 bg-slate-900/60 p-4 text-lg font-semibold text-slate-100"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-200">
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="m4.5 12.75 6 6 9-13.5"
+                        />
+                      </svg>
+                    </span>
+                    {solution}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </section>
