@@ -3,6 +3,8 @@ import type { MouseEvent } from 'react'
 import { useState } from 'react'
 
 const bookingUrl = 'https://calendly.com/vjeko-ai/free-automation-audit'
+const N8N_WEBHOOK_URL =
+  'https://n8n-xmxo3s5m4sn69amy166p54bn.34.130.94.98.sslip.io/webhook-test/new-ai-agency-lead'
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -133,6 +135,32 @@ function App() {
 
     if (error) {
       console.error('Failed to save assessment answers:', error)
+    } else {
+      try {
+        const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: contactForm.name.trim(),
+            email: contactForm.email.trim(),
+            phone: contactForm.phone.trim(),
+            business_name: contactForm.businessName.trim(),
+            service_type: selectedAnswers[0],
+            lead_source: selectedAnswers[1],
+            response_speed: selectedAnswers[2],
+            submitted_at: new Date().toISOString(),
+            calendly_url: calendlyUrl.toString(),
+          }),
+        })
+
+        if (!n8nResponse.ok) {
+          throw new Error(`n8n webhook failed with ${n8nResponse.status}`)
+        }
+      } catch (webhookError) {
+        console.error('Failed to send lead to n8n:', webhookError)
+      }
     }
 
     console.log('Calendly booking URL:', calendlyUrl.toString())
