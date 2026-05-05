@@ -32,12 +32,12 @@ function App() {
       options: ['HVAC', 'Plumbing', 'Electrical'],
     },
     {
-      question: 'How do you currently handle new leads?',
-      options: ['Phone calls', 'Website forms', 'Calls and forms'],
+      question: 'Where do most of your new leads come in today?',
+      options: ['Mostly phone calls', 'Mostly website forms', 'Both calls and forms'],
     },
     {
-      question: 'Do you ever miss calls or respond late?',
-      options: ['Yes, often', 'Sometimes', 'Not sure'],
+      question: 'How often do you miss calls or respond late to new leads?',
+      options: ['Frequently', 'Sometimes', 'Rarely / Never'],
     },
   ]
 
@@ -314,6 +314,9 @@ function App() {
 
         <div className="relative mx-auto max-w-5xl">
           <div className="mx-auto max-w-3xl text-center">
+            <p className="mb-3 text-sm font-semibold text-slate-400">
+              Step 1 of 3 &bull; Takes ~30 seconds
+            </p>
             <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
               Quick lead capture assessment
             </p>
@@ -361,9 +364,12 @@ function App() {
               href="#contact"
               className="rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
             >
-              Continue to Booking
+              See If This Can Work For Me
             </a>
           </div>
+          <p className="mt-4 text-center text-sm font-medium text-slate-400">
+            No pressure &bull; Just a quick call to see if it fits
+          </p>
         </div>
       </section>
     </main>
