@@ -9,6 +9,18 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY,
 )
 
+const leadSourceParams: Record<string, string> = {
+  'Mostly phone calls': 'phone',
+  'Mostly website forms': 'forms',
+  'Both calls and forms': 'both',
+}
+
+const responseSpeedParams: Record<string, string> = {
+  Frequently: 'frequently',
+  Sometimes: 'sometimes',
+  'Rarely / Never': 'rarely',
+}
+
 function App() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>(
     {},
@@ -81,6 +93,17 @@ function App() {
       return
     }
 
+    const calendlyUrl = new URL(bookingUrl)
+    calendlyUrl.searchParams.set('service', selectedAnswers[0])
+    calendlyUrl.searchParams.set(
+      'source',
+      leadSourceParams[selectedAnswers[1]] ?? selectedAnswers[1],
+    )
+    calendlyUrl.searchParams.set(
+      'speed',
+      responseSpeedParams[selectedAnswers[2]] ?? selectedAnswers[2],
+    )
+
     const { error } = await supabase.from('leads').insert({
       service_type: selectedAnswers[0],
       lead_source: selectedAnswers[1],
@@ -91,7 +114,8 @@ function App() {
       console.error('Failed to save assessment answers:', error)
     }
 
-    window.open(bookingUrl, '_blank', 'noopener,noreferrer')
+    console.log('Calendly booking URL:', calendlyUrl.toString())
+    window.open(calendlyUrl.toString(), '_blank', 'noopener,noreferrer')
   }
 
   return (
