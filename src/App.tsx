@@ -398,6 +398,9 @@ function App() {
             <p className="mb-5 text-sm font-medium text-slate-400">
               Most teams who see this wish they fixed it sooner.
             </p>
+            <p className="mb-3 text-sm font-medium text-slate-400">
+              Takes 2 minutes &bull; No commitment required
+            </p>
             <a
               href="https://calendly.com/your-link"
               target="_blank"
@@ -408,14 +411,18 @@ function App() {
                 disabled={!isAssessmentComplete}
                 className={`rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
                   isAssessmentComplete
-                    ? 'hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-cyan-400/30'
+                    ? 'hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-xl hover:shadow-cyan-400/35'
                     : 'cursor-not-allowed opacity-50'
                 }`}
               >
-                Get My Free Automation Plan
+                Get My Free Automation Plan -&gt;
               </button>
             </a>
           </div>
+          <p className="mt-4 text-center text-sm font-medium text-slate-400">
+            You&apos;ll speak directly with someone who understands service
+            businesses.
+          </p>
           <p className="mt-4 text-center text-sm font-medium text-slate-400">
             You&apos;ll answer a few quick questions and see if this makes
             sense for your business.
