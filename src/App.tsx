@@ -1,4 +1,13 @@
+import { createClient } from '@supabase/supabase-js'
+import type { MouseEvent } from 'react'
 import { useState } from 'react'
+
+const bookingUrl = 'https://calendly.com/vjeko-ai/free-automation-audit'
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+)
 
 function App() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>(
@@ -47,8 +56,6 @@ function App() {
     },
   ]
 
-  const bookingUrl = 'https://calendly.com/vjeko-ai/free-automation-audit'
-
   const auditBenefits = [
     {
       title: 'See exactly where leads are slipping through the cracks',
@@ -66,6 +73,26 @@ function App() {
 
   const isAssessmentComplete =
     Object.keys(selectedAnswers).length === assessmentQuestions.length
+
+  const handleAssessmentBooking = async (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault()
+
+    if (!isAssessmentComplete) {
+      return
+    }
+
+    const { error } = await supabase.from('leads').insert({
+      service_type: selectedAnswers[0],
+      lead_source: selectedAnswers[1],
+      response_speed: selectedAnswers[2],
+    })
+
+    if (error) {
+      console.error('Failed to save assessment answers:', error)
+    }
+
+    window.open(bookingUrl, '_blank', 'noopener,noreferrer')
+  }
 
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 text-white">
@@ -422,6 +449,7 @@ function App() {
               href={bookingUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={handleAssessmentBooking}
             >
               <button
                 type="button"
