@@ -13,16 +13,16 @@ function App() {
 
   const trustPoints = [
     {
-      title: 'Fast setup',
-      text: 'Launch a lead response system around your existing calls, forms, and follow-up process.',
+      title: 'Catch after-hours calls',
+      text: 'Reply to urgent requests when your office is closed, before the lead calls someone else.',
     },
     {
-      title: 'No extra staff needed',
-      text: 'Handle more inbound demand without hiring another dispatcher or office admin.',
+      title: 'Book more without more admin',
+      text: 'Capture names, needs, and contact details without adding another person to the desk.',
     },
     {
-      title: 'Proven service workflows',
-      text: 'Built around the way HVAC, plumbing, and electrical customers actually request help.',
+      title: 'Keep scheduling moving',
+      text: 'Get the right details upfront so your team can quote, call back, or schedule faster.',
     },
   ]
 
@@ -225,17 +225,22 @@ function App() {
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
               <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
-                Trust built in
+                Built for HVAC, plumbing, and electrical teams
               </p>
               <h2 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
-                Built for real service businesses that need jobs booked, not
-                more software to manage.
+                Book more jobs from leads you already get.
               </h2>
               <p className="mt-6 text-lg leading-8 text-slate-300">
-                Your team stays focused on the work in the field while AI helps
-                capture demand, follow up quickly, and keep revenue from
-                slipping through the cracks.
+                Automate the first reply, capture the job details, and save
+                your team hours of chasing so more calls and form fills become
+                scheduled work.
               </p>
+              <a
+                href="#contact"
+                className="mt-8 inline-flex rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
+              >
+                Get My Free Automation Audit
+              </a>
             </div>
 
             <div className="grid gap-4">
@@ -276,9 +281,9 @@ function App() {
                   Early client results
                 </p>
                 <p className="mt-3 text-xl font-semibold leading-8 text-white">
-                  Service teams use this system to respond faster after hours,
-                  recover more web leads, and turn missed opportunities into
-                  booked estimates.
+                  Early service teams are using this to cut response time on
+                  new leads, recover requests that used to sit overnight, and
+                  turn more estimate requests into booked appointments.
                 </p>
               </div>
             </div>
