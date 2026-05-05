@@ -1,4 +1,10 @@
+import { useState } from 'react'
+
 function App() {
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>(
+    {},
+  )
+
   const problems = [
     'After-hours calls go unanswered while competitors book the job',
     'Quote requests wait hours before anyone follows up',
@@ -321,11 +327,15 @@ function App() {
               Quick lead capture assessment
             </p>
             <h2 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
-              See if this would work for your business
+              See how many jobs you might be losing each week
             </h2>
             <p className="mt-5 text-lg leading-8 text-slate-300">
               Answer a few quick questions so we can see where leads are being
               missed and what kind of automation would help you book more jobs.
+            </p>
+            <p className="mt-4 text-base font-medium text-cyan-100">
+              Most service teams don&apos;t realize how many leads slip through
+              until they see it.
             </p>
           </div>
 
@@ -349,7 +359,18 @@ function App() {
                     <button
                       key={option}
                       type="button"
-                      className="rounded-xl border border-white/10 bg-slate-900/70 px-5 py-4 text-left text-base font-semibold text-slate-200 transition hover:border-cyan-300/50 hover:bg-cyan-400/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
+                      aria-pressed={selectedAnswers[index] === option}
+                      onClick={() =>
+                        setSelectedAnswers((currentAnswers) => ({
+                          ...currentAnswers,
+                          [index]: option,
+                        }))
+                      }
+                      className={`rounded-xl border px-5 py-4 text-left text-base font-semibold transition focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+                        selectedAnswers[index] === option
+                          ? 'border-cyan-400 bg-cyan-400/15 text-white shadow-lg shadow-cyan-400/10'
+                          : 'border-white/10 bg-slate-900/70 text-slate-200 hover:border-cyan-300/50 hover:bg-cyan-400/10 hover:text-white'
+                      }`}
                     >
                       {option}
                     </button>
@@ -359,7 +380,7 @@ function App() {
             ))}
           </div>
 
-          <div className="mt-10 flex justify-center">
+          <div className="mt-14 flex justify-center">
             <a
               href="#contact"
               className="rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
