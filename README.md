@@ -1,73 +1,42 @@
-# React + TypeScript + Vite
+# AI Agency Lead Capture
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Description
+Modern lead capture application for an AI automation agency.
+Includes a quick assessment flow (3–5 questions) and a booking/onboarding system for capturing qualified leads.
 
-Currently, two official plugins are available:
+## Tech Stack
+- React (Vite)
+- TypeScript
+- Tailwind CSS (coming next)
+- Supabase (planned)
+- Vercel
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Setup
 
-## React Compiler
+Install dependencies:
+npm install
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Run development server:
+npm run dev
 
-## Expanding the ESLint configuration
+## Environment Variables
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Create a `.env.local` file in the root of the project:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+VITE_SUPABASE_URL=your_url_here  
+VITE_SUPABASE_ANON_KEY=your_key_here  
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Deployment
+- Hosted on Vercel
+- Production branch: master
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Features (Planned)
+- Modern landing page
+- Multi-step assessment (3–5 questions)
+- Lead capture form
+- Booking integration (Calendly/TidyCal)
+- Supabase database integration
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Notes
+Built using a structured AI-assisted development workflow (Codex).
+All development is done using feature branches with preview deployments before merging to production.
