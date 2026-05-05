@@ -47,6 +47,14 @@ function App() {
     },
   ]
 
+  const bookingUrl = 'https://calendly.com/vjeko-ai/free-automation-audit'
+
+  const auditBenefits = [
+    'Find where leads are being missed',
+    'Map your current follow-up process',
+    'Show what could be automated first',
+  ]
+
   const isAssessmentComplete =
     Object.keys(selectedAnswers).length === assessmentQuestions.length
 
@@ -402,7 +410,7 @@ function App() {
               Takes 2 minutes &bull; No commitment required
             </p>
             <a
-              href="https://calendly.com/vjeko-ai/free-automation-audit"
+              href={bookingUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -430,6 +438,57 @@ function App() {
           <p className="mt-4 text-center text-sm font-medium text-slate-400">
             No pressure &bull; Just a quick call to see if it fits
           </p>
+        </div>
+      </section>
+
+      <section className="relative border-t border-white/10 bg-slate-900 px-6 py-20 sm:py-24">
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,#020617_0%,#0f172a_50%,#111827_100%)] opacity-80" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
+
+        <div className="relative mx-auto max-w-6xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+              Free automation audit
+            </p>
+            <h2 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
+              What you&apos;ll get on the free audit
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-slate-300">
+              A clear look at how your service business handles new leads today
+              and where faster follow-up could help you book more jobs.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-5 md:grid-cols-3">
+            {auditBenefits.map((benefit, index) => (
+              <div
+                key={benefit}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/10"
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-400/10 text-sm font-bold text-cyan-200">
+                  {index + 1}
+                </span>
+                <h3 className="mt-5 text-xl font-bold leading-7 text-white">
+                  {benefit}
+                </h3>
+              </div>
+            ))}
+          </div>
+
+          <div className="mx-auto mt-12 max-w-3xl text-center">
+            <p className="text-lg leading-8 text-slate-300">
+              No pressure, no commitment - just a clear look at whether
+              automation makes sense for your business.
+            </p>
+            <a
+              href={bookingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-8 inline-flex rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition-all duration-200 hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-xl hover:shadow-cyan-400/35 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
+            >
+              Book My Free Audit
+            </a>
+          </div>
         </div>
       </section>
     </main>
