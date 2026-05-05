@@ -402,7 +402,7 @@ function App() {
               Takes 2 minutes &bull; No commitment required
             </p>
             <a
-              href="https://calendly.com/your-link"
+              href="https://calendly.com/vjeko-ai/free-automation-audit"
               target="_blank"
               rel="noopener noreferrer"
             >
