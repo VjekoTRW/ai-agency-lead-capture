@@ -496,6 +496,16 @@ function App() {
               Most service teams don&apos;t realize how many jobs they&apos;re
               losing until they see this.
             </p>
+            <div className="mt-6 mb-6 text-center">
+              <p className="text-lg font-semibold text-slate-200">
+                Most teams like yours are losing{' '}
+                <span className="text-cyan-300">5&ndash;15+ jobs per month</span>{' '}
+                from slow follow-up alone.
+              </p>
+              <p className="mt-2 text-sm text-slate-400">
+                And they don&apos;t realize it until they see the numbers.
+              </p>
+            </div>
             <a
               href={bookingUrl}
               target="_blank"
