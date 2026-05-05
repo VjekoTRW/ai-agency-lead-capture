@@ -398,17 +398,23 @@ function App() {
             <p className="mb-5 text-sm font-medium text-slate-400">
               Most teams who see this wish they fixed it sooner.
             </p>
-            <button
-              type="button"
-              disabled={!isAssessmentComplete}
-              className={`rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
-                isAssessmentComplete
-                  ? 'hover:scale-105 hover:bg-cyan-300'
-                  : 'cursor-not-allowed opacity-50'
-              }`}
+            <a
+              href="https://calendly.com/your-link"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              Get My Free Automation Plan
-            </button>
+              <button
+                type="button"
+                disabled={!isAssessmentComplete}
+                className={`rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+                  isAssessmentComplete
+                    ? 'hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-cyan-400/30'
+                    : 'cursor-not-allowed opacity-50'
+                }`}
+              >
+                Get My Free Automation Plan
+              </button>
+            </a>
           </div>
           <p className="mt-4 text-center text-sm font-medium text-slate-400">
             You&apos;ll answer a few quick questions and see if this makes
