@@ -564,9 +564,17 @@ function App() {
             </p>
           </div>
 
-          <div className="mt-12 text-center">
+          <div className="mt-8 text-center">
+            <h3 className="mx-auto max-w-3xl text-2xl font-bold leading-tight text-white sm:text-3xl">
+              See exactly how many jobs you&apos;re losing before your
+              competitors take them
+            </h3>
+            <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-slate-300">
+              This takes 2 minutes and shows where you&apos;re leaking revenue
+              right now.
+            </p>
             <p
-              className={`mb-5 text-sm font-medium transition-opacity duration-200 ${
+              className={`mt-5 mb-4 text-sm font-medium transition-opacity duration-200 ${
                 canBookAudit
                   ? 'text-cyan-100 opacity-100'
                   : 'text-slate-500 opacity-70'
@@ -592,16 +600,19 @@ function App() {
               <button
                 type="button"
                 disabled={!canBookAudit}
-                className={`rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+                className={`rounded-full bg-cyan-400 px-10 py-5 text-lg font-semibold text-slate-950 shadow-xl shadow-cyan-400/25 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
                   canBookAudit
-                    ? 'hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-xl hover:shadow-cyan-400/35'
+                    ? 'hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-2xl hover:shadow-cyan-400/45'
                     : 'cursor-not-allowed opacity-50'
                 }`}
               >
-                See My Missed Jobs -&gt;
+                Show Me My Lost Jobs -&gt;
               </button>
             </a>
           </div>
+          <p className="mt-4 text-center text-sm font-medium text-slate-400">
+            Most service businesses who see this fix it within 7 days.
+          </p>
           <p className="mt-4 text-center text-sm font-medium text-slate-400">
             No spam &bull; Takes 2 minutes &bull; No commitment
           </p>
