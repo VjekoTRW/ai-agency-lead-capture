@@ -564,17 +564,17 @@ function App() {
             </p>
           </div>
 
-          <div className="mt-8 text-center">
+          <div className="mt-6 text-center">
             <h3 className="mx-auto max-w-3xl text-2xl font-bold leading-tight text-white sm:text-3xl">
-              See exactly how many jobs you&apos;re losing before your
-              competitors take them
+              You&apos;re likely losing jobs every week - see exactly where
+              before your competitors take them
             </h3>
             <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-slate-300">
               This takes 2 minutes and shows where you&apos;re leaking revenue
               right now.
             </p>
             <p
-              className={`mt-5 mb-4 text-sm font-medium transition-opacity duration-200 ${
+              className={`mt-4 mb-3 text-sm font-medium transition-opacity duration-200 ${
                 canBookAudit
                   ? 'text-cyan-100 opacity-100'
                   : 'text-slate-500 opacity-70'
@@ -600,9 +600,9 @@ function App() {
               <button
                 type="button"
                 disabled={!canBookAudit}
-                className={`rounded-full bg-cyan-400 px-10 py-5 text-lg font-semibold text-slate-950 shadow-xl shadow-cyan-400/25 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+                className={`rounded-full bg-cyan-400 px-12 py-5 text-xl font-semibold text-slate-950 shadow-2xl shadow-cyan-400/30 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
                   canBookAudit
-                    ? 'hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-2xl hover:shadow-cyan-400/45'
+                    ? 'animate-pulse hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-[0_0_45px_rgba(34,211,238,0.45)]'
                     : 'cursor-not-allowed opacity-50'
                 }`}
               >
@@ -615,17 +615,6 @@ function App() {
           </p>
           <p className="mt-4 text-center text-sm font-medium text-slate-400">
             No spam &bull; Takes 2 minutes &bull; No commitment
-          </p>
-          <p className="mt-4 text-center text-sm font-medium text-slate-400">
-            You&apos;ll speak directly with someone who understands service
-            businesses.
-          </p>
-          <p className="mt-4 text-center text-sm font-medium text-slate-400">
-            You&apos;ll answer a few quick questions and see if this makes
-            sense for your business.
-          </p>
-          <p className="mt-4 text-center text-sm font-medium text-slate-400">
-            No pressure &bull; Just a quick call to see if it fits
           </p>
         </div>
       </section>
