@@ -564,32 +564,14 @@ function App() {
             </p>
           </div>
 
-          <div className="mt-6 text-center">
+          <div className="mt-5 text-center">
             <h3 className="mx-auto max-w-3xl text-2xl font-bold leading-tight text-white sm:text-3xl">
               You&apos;re likely losing jobs every week - see exactly where
               before your competitors take them
             </h3>
-            <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-slate-300">
+            <p className="mx-auto mt-2 max-w-2xl text-base leading-7 text-slate-300">
               This takes 2 minutes and shows where you&apos;re leaking revenue
               right now.
-            </p>
-            <p
-              className={`mt-4 mb-3 text-sm font-medium transition-opacity duration-200 ${
-                canBookAudit
-                  ? 'text-cyan-100 opacity-100'
-                  : 'text-slate-500 opacity-70'
-              }`}
-            >
-              {canBookAudit
-                ? "Based on your answers, you're likely losing 5-15+ jobs per month from missed calls and slow follow-up."
-                : 'Answer all questions and add your contact details to unlock your free plan.'}
-            </p>
-            <p className="mb-5 text-sm font-medium text-slate-400">
-              Most service businesses don&apos;t realize this until they see
-              the numbers.
-            </p>
-            <p className="mb-3 text-sm font-medium text-slate-400">
-              Takes 2 minutes &bull; No commitment required
             </p>
             <a
               href={bookingUrl}
@@ -600,17 +582,17 @@ function App() {
               <button
                 type="button"
                 disabled={!canBookAudit}
-                className={`rounded-full bg-cyan-400 px-12 py-5 text-xl font-semibold text-slate-950 shadow-2xl shadow-cyan-400/30 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+                className={`mt-4 rounded-full bg-cyan-400 px-12 py-5 text-xl font-semibold text-slate-950 shadow-2xl shadow-cyan-400/40 transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
                   canBookAudit
-                    ? 'animate-pulse hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-[0_0_45px_rgba(34,211,238,0.45)]'
+                    ? 'animate-pulse hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-cyan-400/70'
                     : 'cursor-not-allowed opacity-50'
                 }`}
               >
-                Show Me My Lost Jobs -&gt;
+                Show Me Where I&apos;m Losing Jobs -&gt;
               </button>
             </a>
           </div>
-          <p className="mt-4 text-center text-sm font-medium text-slate-400">
+          <p className="mt-4 text-center text-sm font-medium text-slate-300">
             Most service businesses who see this fix it within 7 days.
           </p>
           <p className="mt-4 text-center text-sm font-medium text-slate-400">
