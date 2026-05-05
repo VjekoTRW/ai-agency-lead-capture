@@ -478,8 +478,12 @@ function App() {
                 Your contact details
               </p>
               <h3 className="mt-2 text-xl font-bold text-white">
-                Where should we send your automation plan?
+                Get your custom automation plan in the next 2 minutes
               </h3>
+              <p className="mt-2 leading-7 text-slate-300">
+                This shows exactly where you&apos;re losing jobs - and how to
+                fix it fast.
+              </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -555,6 +559,9 @@ function App() {
                 />
               </label>
             </div>
+            <p className="mt-4 text-sm font-medium text-slate-400">
+              We only use your info to prepare your plan. No spam. Ever.
+            </p>
           </div>
 
           <div className="mt-12 text-center">
@@ -566,11 +573,12 @@ function App() {
               }`}
             >
               {canBookAudit
-                ? "Based on your answers, you're likely missing qualified jobs each week."
+                ? "Based on your answers, you're likely losing 5-15+ jobs per month from missed calls and slow follow-up."
                 : 'Answer all questions and add your contact details to unlock your free plan.'}
             </p>
             <p className="mb-5 text-sm font-medium text-slate-400">
-              Most teams who see this wish they fixed it sooner.
+              Most service businesses don&apos;t realize this until they see
+              the numbers.
             </p>
             <p className="mb-3 text-sm font-medium text-slate-400">
               Takes 2 minutes &bull; No commitment required
@@ -590,10 +598,13 @@ function App() {
                     : 'cursor-not-allowed opacity-50'
                 }`}
               >
-                Get My Free Automation Plan -&gt;
+                See My Missed Jobs -&gt;
               </button>
             </a>
           </div>
+          <p className="mt-4 text-center text-sm font-medium text-slate-400">
+            No spam &bull; Takes 2 minutes &bull; No commitment
+          </p>
           <p className="mt-4 text-center text-sm font-medium text-slate-400">
             You&apos;ll speak directly with someone who understands service
             businesses.
