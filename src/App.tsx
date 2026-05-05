@@ -582,13 +582,13 @@ function App() {
               <button
                 type="button"
                 disabled={!canBookAudit}
-                className={`mt-4 rounded-full bg-cyan-400 px-12 py-5 text-xl font-semibold text-slate-950 shadow-2xl shadow-cyan-400/40 transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+                className={`mt-4 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 px-12 py-5 text-xl font-semibold text-slate-950 shadow-2xl shadow-cyan-400/30 transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
                   canBookAudit
-                    ? 'animate-pulse hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-cyan-400/70'
+                    ? 'animate-pulse hover:-translate-y-0.5 hover:scale-105 hover:brightness-110 hover:shadow-cyan-400/70'
                     : 'cursor-not-allowed opacity-50'
                 }`}
               >
-                Show Me Where I&apos;m Losing Jobs -&gt;
+                Show Me Exactly Where I&apos;m Losing Jobs -&gt;
               </button>
             </a>
           </div>
