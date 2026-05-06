@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 const bookingUrl = 'https://calendly.com/vjeko-ai/free-automation-audit'
 const N8N_WEBHOOK_URL =
-  'https://n8n-xmxo3s5m4sn69amy166p54bn.34.130.94.98.sslip.io/webhook-test/new-ai-agency-lead'
+  'https://n8n-xmxo3s5m4sn69amy166p54bn.34.130.94.98.sslip.io/webhook/new-ai-agency-lead'
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
