@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import type { MouseEvent } from 'react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import * as googleAnalytics from './lib/googleAnalytics'
+import * as metaPixel from './lib/metaPixel'
 
 const bookingUrl = 'https://calendly.com/vjeko-ai/free-automation-audit'
 const N8N_WEBHOOK_URL =
@@ -33,6 +35,8 @@ function App() {
     phone: '',
     businessName: '',
   })
+  const formStartedTracked = useRef(false)
+  const formCompletedTracked = useRef(false)
 
   const problems = [
     'After-hours calls go unanswered while competitors book the job',
@@ -98,6 +102,37 @@ function App() {
   )
   const canBookAudit = isAssessmentComplete && isContactComplete
 
+  useEffect(() => {
+    googleAnalytics.initializeGoogleAnalytics()
+    metaPixel.initializeMetaPixel()
+  }, [])
+
+  useEffect(() => {
+    if (canBookAudit && !formCompletedTracked.current) {
+      googleAnalytics.trackFormCompleted()
+      metaPixel.trackFormCompleted()
+      formCompletedTracked.current = true
+    }
+  }, [canBookAudit])
+
+  const handleAssessmentAnswerSelect = (index: number, option: string) => {
+    if (!formStartedTracked.current) {
+      googleAnalytics.trackFormStarted()
+      metaPixel.trackFormStarted()
+      formStartedTracked.current = true
+    }
+
+    setSelectedAnswers((currentAnswers) => ({
+      ...currentAnswers,
+      [index]: option,
+    }))
+  }
+
+  const trackCalendlyOpen = () => {
+    googleAnalytics.trackCalendlyClick()
+    metaPixel.trackCalendlyClick()
+  }
+
   const handleAssessmentBooking = async (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
 
@@ -160,6 +195,19 @@ function App() {
     if (lookupError || error) {
       console.error('Failed to save assessment answers:', lookupError || error)
     } else {
+      googleAnalytics.trackLead()
+      metaPixel.trackLead()
+
+      if (submissionCount > 1) {
+        googleAnalytics.trackRepeatLead()
+        metaPixel.trackRepeatLead()
+      }
+
+      if (leadData.response_speed === 'Frequently') {
+        googleAnalytics.trackHotLead()
+        metaPixel.trackHotLead()
+      }
+
       try {
         const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
           method: 'POST',
@@ -189,6 +237,7 @@ function App() {
     }
 
     console.log('Calendly booking URL:', calendlyUrl.toString())
+    trackCalendlyOpen()
     window.open(calendlyUrl.toString(), '_blank', 'noopener,noreferrer')
   }
 
@@ -505,12 +554,7 @@ function App() {
                       key={option}
                       type="button"
                       aria-pressed={selectedAnswers[index] === option}
-                      onClick={() =>
-                        setSelectedAnswers((currentAnswers) => ({
-                          ...currentAnswers,
-                          [index]: option,
-                        }))
-                      }
+                      onClick={() => handleAssessmentAnswerSelect(index, option)}
                       className={`rounded-xl border px-5 py-4 text-left text-base font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950 ${
                         selectedAnswers[index] === option
                           ? 'scale-[1.02] border-cyan-400 bg-cyan-400/15 text-white shadow-lg shadow-cyan-400/10 brightness-110'
@@ -714,6 +758,7 @@ function App() {
               href={bookingUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={trackCalendlyOpen}
               className="mt-8 inline-flex rounded-full bg-cyan-400 px-8 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-cyan-400/20 transition-all duration-200 hover:scale-105 hover:bg-cyan-300 hover:brightness-110 hover:shadow-xl hover:shadow-cyan-400/35 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
             >
               See What You&apos;re Losing -&gt;
