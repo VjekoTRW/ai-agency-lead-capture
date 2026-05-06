@@ -14,17 +14,25 @@ declare global {
 }
 
 let isInitialized = false
+let isInitializing = false
+const pendingEvents: Array<['event', string, Record<string, unknown>?]> = []
 
 const trackEvent = (eventName: string, parameters?: Record<string, unknown>) => {
-  window.gtag?.('event', eventName, parameters)
-}
-
-export const initializeGoogleAnalytics = () => {
-  if (isInitialized) {
+  if (!isInitialized) {
+    pendingEvents.push(['event', eventName, parameters])
     return
   }
 
-  isInitialized = true
+  window.gtag?.('event', eventName, parameters)
+  console.log(`GA4 event fired: ${eventName}`)
+}
+
+export const initializeGoogleAnalytics = () => {
+  if (isInitialized || isInitializing) {
+    return
+  }
+
+  isInitializing = true
   window.dataLayer = window.dataLayer ?? []
   window.gtag =
     window.gtag ??
@@ -32,21 +40,42 @@ export const initializeGoogleAnalytics = () => {
       window.dataLayer?.push(args)
     }
 
+  const completeInitialization = () => {
+    if (isInitialized) {
+      return
+    }
+
+    window.gtag?.('js', new Date())
+    window.gtag?.('config', GA_MEASUREMENT_ID)
+    isInitialized = true
+    isInitializing = false
+    console.log('GA4 initialized')
+
+    while (pendingEvents.length > 0) {
+      const [, eventName, parameters] = pendingEvents.shift()!
+      trackEvent(eventName, parameters)
+    }
+  }
+
+  const existingScript = document.getElementById(GA_SCRIPT_ID)
+
+  if (existingScript) {
+    completeInitialization()
+    return
+  }
+
   if (!document.getElementById(GA_SCRIPT_ID)) {
     const script = document.createElement('script')
     script.id = GA_SCRIPT_ID
     script.async = true
     script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`
+    script.onload = completeInitialization
+    script.onerror = () => {
+      isInitializing = false
+      console.error('GA4 script failed to load')
+    }
     document.head.appendChild(script)
   }
-
-  window.gtag('js', new Date())
-  window.gtag('config', GA_MEASUREMENT_ID, { send_page_view: false })
-  trackEvent('page_view', {
-    page_location: window.location.href,
-    page_path: window.location.pathname,
-    page_title: document.title,
-  })
 }
 
 export const trackLead = () => {
