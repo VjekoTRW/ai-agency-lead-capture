@@ -140,17 +140,21 @@ function App() {
       .eq('email', leadData.email)
       .maybeSingle()
 
+    const submissionCount = existingLead
+      ? (existingLead.submission_count ?? 0) + 1
+      : 1
+
     const { error } = existingLead
       ? await supabase
           .from('leads')
           .update({
             ...leadData,
-            submission_count: (existingLead.submission_count ?? 0) + 1,
+            submission_count: submissionCount,
           })
           .eq('email', leadData.email)
       : await supabase.from('leads').insert({
           ...leadData,
-          submission_count: 1,
+          submission_count: submissionCount,
         })
 
     if (lookupError || error) {
@@ -170,6 +174,7 @@ function App() {
             service_type: selectedAnswers[0],
             lead_source: selectedAnswers[1],
             response_speed: selectedAnswers[2],
+            submission_count: submissionCount,
             submitted_at: new Date().toISOString(),
             calendly_url: calendlyUrl.toString(),
           }),
