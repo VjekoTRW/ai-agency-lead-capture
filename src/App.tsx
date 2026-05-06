@@ -123,22 +123,38 @@ function App() {
       contactForm.businessName.trim(),
     )
 
-    const { error } = await supabase.from('leads').upsert(
-      {
-        name: contactForm.name.trim(),
-        email: contactForm.email.trim(),
-        phone: contactForm.phone.trim(),
-        business_name: contactForm.businessName.trim(),
-        service_type: selectedAnswers[0],
-        lead_source: selectedAnswers[1],
-        response_speed: selectedAnswers[2],
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'email' },
-    )
+    const leadData = {
+      name: contactForm.name.trim(),
+      email: contactForm.email.trim(),
+      phone: contactForm.phone.trim(),
+      business_name: contactForm.businessName.trim(),
+      service_type: selectedAnswers[0],
+      lead_source: selectedAnswers[1],
+      response_speed: selectedAnswers[2],
+      updated_at: new Date().toISOString(),
+    }
 
-    if (error) {
-      console.error('Failed to save assessment answers:', error)
+    const { data: existingLead, error: lookupError } = await supabase
+      .from('leads')
+      .select('submission_count')
+      .eq('email', leadData.email)
+      .maybeSingle()
+
+    const { error } = existingLead
+      ? await supabase
+          .from('leads')
+          .update({
+            ...leadData,
+            submission_count: (existingLead.submission_count ?? 0) + 1,
+          })
+          .eq('email', leadData.email)
+      : await supabase.from('leads').insert({
+          ...leadData,
+          submission_count: 1,
+        })
+
+    if (lookupError || error) {
+      console.error('Failed to save assessment answers:', lookupError || error)
     } else {
       try {
         const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
