@@ -123,15 +123,19 @@ function App() {
       contactForm.businessName.trim(),
     )
 
-    const { error } = await supabase.from('leads').insert({
-      name: contactForm.name.trim(),
-      email: contactForm.email.trim(),
-      phone: contactForm.phone.trim(),
-      business_name: contactForm.businessName.trim(),
-      service_type: selectedAnswers[0],
-      lead_source: selectedAnswers[1],
-      response_speed: selectedAnswers[2],
-    })
+    const { error } = await supabase.from('leads').upsert(
+      {
+        name: contactForm.name.trim(),
+        email: contactForm.email.trim(),
+        phone: contactForm.phone.trim(),
+        business_name: contactForm.businessName.trim(),
+        service_type: selectedAnswers[0],
+        lead_source: selectedAnswers[1],
+        response_speed: selectedAnswers[2],
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'email' },
+    )
 
     if (error) {
       console.error('Failed to save assessment answers:', error)
