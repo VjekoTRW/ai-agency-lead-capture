@@ -263,6 +263,7 @@ function LandingPage() {
       'business_name',
       contactForm.businessName.trim(),
     )
+    const finalizedCalendlyUrl = calendlyUrl.toString()
 
     const leadData = {
       name: contactForm.name.trim(),
@@ -272,6 +273,7 @@ function LandingPage() {
       service_type: selectedAnswers[0],
       lead_source: selectedAnswers[1],
       response_speed: selectedAnswers[2],
+      calendly_url: finalizedCalendlyUrl,
       updated_at: new Date().toISOString(),
     }
 
@@ -330,7 +332,7 @@ function LandingPage() {
             response_speed: selectedAnswers[2],
             submission_count: submissionCount,
             submitted_at: new Date().toISOString(),
-            calendly_url: calendlyUrl.toString(),
+            calendly_url: finalizedCalendlyUrl,
           }),
         })
 
@@ -342,9 +344,9 @@ function LandingPage() {
       }
     }
 
-    console.log('Calendly booking URL:', calendlyUrl.toString())
+    console.log('Calendly booking URL:', finalizedCalendlyUrl)
     trackCalendlyOpen()
-    window.open(calendlyUrl.toString(), '_blank', 'noopener,noreferrer')
+    window.open(finalizedCalendlyUrl, '_blank', 'noopener,noreferrer')
   }
 
   return (
