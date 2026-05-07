@@ -1269,7 +1269,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
               <ConversionCard
                 label="Close Rate"
                 value={dashboardAnalytics.closeRate}
-                helper="closed / qualified"
+                helper="closed / total"
                 loading={loading}
               />
             </div>
@@ -1898,7 +1898,7 @@ function buildDashboardAnalytics(
     ],
     qualificationRate: calculatePercentage(qualified, total),
     bookingRate: calculatePercentage(booked, total),
-    closeRate: calculatePercentage(closed, qualified),
+    closeRate: calculatePercentage(closed, total),
     temperatureCounts,
     leadsOverTime: buildLeadsOverTimeData(leadsByDate, timeRange),
     statusChartData: statusOptions.map((status) => ({
