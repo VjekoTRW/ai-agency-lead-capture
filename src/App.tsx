@@ -1779,7 +1779,7 @@ function LeadDetailModal({
             ) : null}
           </div>
 
-          <div className="space-y-5">
+          <div className="grid min-w-0 gap-5 lg:grid-cols-2">
             <DetailSection title="Contact">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Name" value={lead.name} />
@@ -1793,35 +1793,6 @@ function LeadDetailModal({
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Business name" value={lead.business_name} />
                 <DetailField label="Service type" value={lead.service_type} />
-              </div>
-            </DetailSection>
-
-            <DetailSection title="Qualification answers">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <DetailField label="Lead source" value={lead.lead_source} />
-                <DetailField label="Response speed" value={lead.response_speed} />
-                <DetailField
-                  label="Submission count"
-                  value={lead.submission_count ?? 0}
-                />
-              </div>
-            </DetailSection>
-
-            <DetailSection title="Pipeline">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <DetailField label="Status" value={getLeadStatus(lead)} />
-                <DetailField
-                  label="Lead temperature"
-                  value={getLeadTemperature(lead)}
-                />
-                <DetailField
-                  label="Created at"
-                  value={formatTorontoDate(lead.created_at)}
-                />
-                <DetailField
-                  label="Updated at"
-                  value={formatTorontoDate(lead.updated_at)}
-                />
               </div>
             </DetailSection>
 
@@ -1852,6 +1823,35 @@ function LeadDetailModal({
                     {noteMessage}
                   </p>
                 ) : null}
+              </div>
+            </DetailSection>
+
+            <DetailSection title="Pipeline">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailField label="Status" value={getLeadStatus(lead)} />
+                <DetailField
+                  label="Lead temperature"
+                  value={getLeadTemperature(lead)}
+                />
+                <DetailField
+                  label="Created at"
+                  value={formatTorontoDate(lead.created_at)}
+                />
+                <DetailField
+                  label="Updated at"
+                  value={formatTorontoDate(lead.updated_at)}
+                />
+              </div>
+            </DetailSection>
+
+            <DetailSection title="Qualification answers">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <DetailField label="Lead source" value={lead.lead_source} />
+                <DetailField label="Response speed" value={lead.response_speed} />
+                <DetailField
+                  label="Submission count"
+                  value={lead.submission_count ?? 0}
+                />
               </div>
             </DetailSection>
 
@@ -1887,22 +1887,22 @@ function DetailSection({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
+    <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-4">
       <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
         {title}
       </h3>
-      <div className="mt-3 space-y-3">{children}</div>
+      <div className="mt-3 min-w-0 space-y-3">{children}</div>
     </section>
   )
 }
 
 function DetailField({ label, value }: { label: string; value: unknown }) {
   return (
-    <div>
+    <div className="min-w-0 overflow-hidden">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
         {label}
       </p>
-      <div className="mt-1 break-words text-sm font-medium text-slate-900">
+      <div className="mt-1 min-w-0 overflow-hidden break-words text-sm font-medium text-slate-900">
         {renderUnknownValue(value)}
       </div>
     </div>
@@ -1911,7 +1911,7 @@ function DetailField({ label, value }: { label: string; value: unknown }) {
 
 function DetailLinkField({ label, href }: { label: string; href: string }) {
   return (
-    <div>
+    <div className="min-w-0 overflow-hidden">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
         {label}
       </p>
@@ -1920,9 +1920,9 @@ function DetailLinkField({ label, href }: { label: string; href: string }) {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-1 block break-words text-sm font-semibold text-cyan-700 hover:text-cyan-900"
+          className="mt-1 inline-flex max-w-full rounded-md border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-100 hover:text-cyan-900"
         >
-          {href}
+          Open booking link
         </a>
       ) : (
         <p className="mt-1 text-sm font-medium text-slate-900">-</p>
