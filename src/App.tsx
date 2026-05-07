@@ -1084,10 +1084,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
 
   const handleStatusChange = async (lead: Lead, nextStatus: string) => {
     const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
     setUpdatingLeadKey(leadKey)
     setError('')
 
-    const query = supabase.from('leads').update({ status: nextStatus })
+    const query = supabase
+      .from('leads')
+      .update({ status: nextStatus, updated_at: updatedAt })
     const { error: updateError } =
       lead.id !== undefined && lead.id !== null
         ? await query.eq('id', lead.id)
@@ -1099,13 +1102,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       setLeads((currentLeads) =>
         currentLeads.map((currentLead) =>
           getLeadKey(currentLead) === leadKey
-            ? { ...currentLead, status: nextStatus }
+            ? { ...currentLead, status: nextStatus, updated_at: updatedAt }
             : currentLead,
         ),
       )
       setSelectedLead((currentLead) =>
         currentLead && getLeadKey(currentLead) === leadKey
-          ? { ...currentLead, status: nextStatus }
+          ? { ...currentLead, status: nextStatus, updated_at: updatedAt }
           : currentLead,
       )
     }
@@ -1115,10 +1118,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
 
   const handleSaveNote = async (lead: Lead, notes: string) => {
     const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
     setSavingNoteLeadKey(leadKey)
     setNoteMessage('')
 
-    const query = supabase.from('leads').update({ notes })
+    const query = supabase
+      .from('leads')
+      .update({ notes, updated_at: updatedAt })
     const { error: noteError } =
       lead.id !== undefined && lead.id !== null
         ? await query.eq('id', lead.id)
@@ -1130,13 +1136,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       setLeads((currentLeads) =>
         currentLeads.map((currentLead) =>
           getLeadKey(currentLead) === leadKey
-            ? { ...currentLead, notes }
+            ? { ...currentLead, notes, updated_at: updatedAt }
             : currentLead,
         ),
       )
       setSelectedLead((currentLead) =>
         currentLead && getLeadKey(currentLead) === leadKey
-          ? { ...currentLead, notes }
+          ? { ...currentLead, notes, updated_at: updatedAt }
           : currentLead,
       )
       setNoteMessage('Note saved.')
@@ -2282,10 +2288,20 @@ function formatDate(value: unknown) {
     return '-'
   }
 
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return '-'
+  }
+
   return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
+    timeZone: 'America/Toronto',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
 }
 
 function renderUnknownValue(value: unknown) {
