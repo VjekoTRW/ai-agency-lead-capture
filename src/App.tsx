@@ -1,6 +1,18 @@
 import { createClient } from '@supabase/supabase-js'
-import type { FormEvent, MouseEvent } from 'react'
+import type { FormEvent, MouseEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import * as googleAnalytics from './lib/googleAnalytics'
 import * as metaPixel from './lib/metaPixel'
 
@@ -38,6 +50,7 @@ type Lead = {
   response_speed?: string | null
   submission_count?: number | null
   created_at?: string | null
+  updated_at?: string | null
   lead_temperature?: string | null
   status?: string | null
   notes?: string | null
@@ -58,6 +71,15 @@ const statusOptions = [
 ] as const
 
 const temperatureOptions = ['HOT', 'WARM', 'COLD'] as const
+
+const timeRangeOptions = [
+  'Today',
+  'Last 7 days',
+  'Last 30 days',
+  'All Time',
+] as const
+
+type TimeRange = (typeof timeRangeOptions)[number]
 
 function App() {
   const [path, setPath] = useState(window.location.pathname)
@@ -992,6 +1014,7 @@ function LoginPage({
 
 function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [leads, setLeads] = useState<Lead[]>([])
+  const [timeRange, setTimeRange] = useState<TimeRange>('Last 30 days')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [temperatureFilter, setTemperatureFilter] = useState('All')
@@ -1025,10 +1048,20 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     fetchLeads()
   }, [])
 
+  const timeFilteredLeads = useMemo(
+    () => leads.filter((lead) => isLeadInTimeRange(lead, timeRange)),
+    [leads, timeRange],
+  )
+
+  const dashboardAnalytics = useMemo(
+    () => buildDashboardAnalytics(timeFilteredLeads, timeRange),
+    [timeFilteredLeads, timeRange],
+  )
+
   const filteredLeads = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
 
-    return leads.filter((lead) => {
+    return timeFilteredLeads.filter((lead) => {
       const searchFields = [
         lead.name,
         lead.email,
@@ -1047,7 +1080,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
 
       return matchesSearch && matchesStatus && matchesTemperature
     })
-  }, [leads, searchTerm, statusFilter, temperatureFilter])
+  }, [timeFilteredLeads, searchTerm, statusFilter, temperatureFilter])
 
   const handleStatusChange = async (lead: Lead, nextStatus: string) => {
     const leadKey = getLeadKey(lead)
@@ -1182,7 +1215,168 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
           </header>
 
           <div className="px-5 py-5">
-            <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr_180px_180px]">
+            <div className="mb-5 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  Performance window
+                </p>
+                <h3 className="text-lg font-bold text-slate-950">
+                  CRM analytics
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:flex">
+                {timeRangeOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setTimeRange(option)}
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                      timeRange === option
+                        ? 'border-slate-950 bg-slate-950 text-white'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              {dashboardAnalytics.kpiCards.map((card) => (
+                <KpiCard
+                  key={card.label}
+                  label={card.label}
+                  value={card.value}
+                  loading={loading}
+                />
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <ConversionCard
+                label="Qualification Rate"
+                value={dashboardAnalytics.qualificationRate}
+                helper="qualified / total"
+                loading={loading}
+              />
+              <ConversionCard
+                label="Booking Rate"
+                value={dashboardAnalytics.bookingRate}
+                helper="booked / total"
+                loading={loading}
+              />
+              <ConversionCard
+                label="Close Rate"
+                value={dashboardAnalytics.closeRate}
+                helper="closed / qualified"
+                loading={loading}
+              />
+            </div>
+
+            <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">
+                    Lead temperature
+                  </p>
+                  <h3 className="text-lg font-bold text-slate-950">
+                    Intent mix
+                  </h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {temperatureOptions.map((temperature) => (
+                    <TemperatureCountBadge
+                      key={temperature}
+                      temperature={temperature}
+                      count={dashboardAnalytics.temperatureCounts[temperature]}
+                      loading={loading}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-5 xl:grid-cols-3">
+              <ChartCard title="Leads over time" loading={loading}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={dashboardAnalytics.leadsOverTime}>
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fill: '#64748b', fontSize: 12 }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fill: '#64748b', fontSize: 12 }}
+                      tickLine={false}
+                    />
+                    <Tooltip />
+                    <Line
+                      type="monotone"
+                      dataKey="leads"
+                      stroke="#0891b2"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              <ChartCard title="Leads by status" loading={loading}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={dashboardAnalytics.statusChartData}>
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="status"
+                      tick={{ fill: '#64748b', fontSize: 12 }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fill: '#64748b', fontSize: 12 }}
+                      tickLine={false}
+                    />
+                    <Tooltip />
+                    <Bar dataKey="leads" radius={[4, 4, 0, 0]}>
+                      {dashboardAnalytics.statusChartData.map((item) => (
+                        <Cell
+                          key={item.status}
+                          fill={getStatusChartColor(item.status)}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              <ChartCard title="Leads by service type" loading={loading}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={dashboardAnalytics.serviceTypeChartData}>
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="serviceType"
+                      tick={{ fill: '#64748b', fontSize: 12 }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fill: '#64748b', fontSize: 12 }}
+                      tickLine={false}
+                    />
+                    <Tooltip />
+                    <Bar
+                      dataKey="leads"
+                      fill="#334155"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
+
+            <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr_180px_180px]">
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Search
@@ -1331,6 +1525,110 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
         />
       ) : null}
     </main>
+  )
+}
+
+type DashboardAnalytics = {
+  kpiCards: Array<{ label: string; value: number }>
+  qualificationRate: number
+  bookingRate: number
+  closeRate: number
+  temperatureCounts: Record<(typeof temperatureOptions)[number], number>
+  leadsOverTime: Array<{ label: string; leads: number }>
+  statusChartData: Array<{ status: string; leads: number }>
+  serviceTypeChartData: Array<{ serviceType: string; leads: number }>
+}
+
+function KpiCard({
+  label,
+  value,
+  loading,
+}: {
+  label: string
+  value: number
+  loading: boolean
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      {loading ? (
+        <div className="mt-3 h-8 w-16 animate-pulse rounded bg-slate-200" />
+      ) : (
+        <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
+      )}
+    </div>
+  )
+}
+
+function ConversionCard({
+  label,
+  value,
+  helper,
+  loading,
+}: {
+  label: string
+  value: number
+  helper: string
+  loading: boolean
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      {loading ? (
+        <div className="mt-3 h-8 w-20 animate-pulse rounded bg-slate-200" />
+      ) : (
+        <p className="mt-2 text-3xl font-bold text-slate-950">{value}%</p>
+      )}
+      <p className="mt-1 text-xs font-medium uppercase tracking-[0.12em] text-slate-400">
+        {helper}
+      </p>
+    </div>
+  )
+}
+
+function ChartCard({
+  title,
+  loading,
+  children,
+}: {
+  title: string
+  loading: boolean
+  children: ReactNode
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+        {title}
+      </h3>
+      <div className="mt-4 h-60">
+        {loading ? (
+          <div className="h-full w-full animate-pulse rounded bg-slate-100" />
+        ) : (
+          children
+        )}
+      </div>
+    </section>
+  )
+}
+
+function TemperatureCountBadge({
+  temperature,
+  count,
+  loading,
+}: {
+  temperature: (typeof temperatureOptions)[number]
+  count: number
+  loading: boolean
+}) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-bold text-slate-700">
+      <TemperatureBadge temperature={temperature} />
+      {loading ? (
+        <span className="h-4 w-6 animate-pulse rounded bg-slate-200" />
+      ) : (
+        <span>{count}</span>
+      )}
+    </span>
   )
 }
 
@@ -1538,6 +1836,189 @@ function Badge({
       {children}
     </span>
   )
+}
+
+function buildDashboardAnalytics(
+  leads: Lead[],
+  timeRange: TimeRange,
+): DashboardAnalytics {
+  const statusCounts = statusOptions.reduce(
+    (counts, status) => ({
+      ...counts,
+      [status]: 0,
+    }),
+    {} as Record<(typeof statusOptions)[number], number>,
+  )
+  const temperatureCounts = temperatureOptions.reduce(
+    (counts, temperature) => ({
+      ...counts,
+      [temperature]: 0,
+    }),
+    {} as Record<(typeof temperatureOptions)[number], number>,
+  )
+  const serviceTypeCounts = new Map<string, number>()
+  const leadsByDate = new Map<string, number>()
+
+  leads.forEach((lead) => {
+    const status = getLeadStatus(lead) as (typeof statusOptions)[number]
+    statusCounts[status] += 1
+
+    const temperature =
+      getLeadTemperature(lead) as (typeof temperatureOptions)[number]
+    temperatureCounts[temperature] += 1
+
+    const serviceType =
+      typeof lead.service_type === 'string' && lead.service_type.trim()
+        ? lead.service_type.trim()
+        : 'Unknown'
+    serviceTypeCounts.set(
+      serviceType,
+      (serviceTypeCounts.get(serviceType) ?? 0) + 1,
+    )
+
+    const dateKey = getDateKey(lead.created_at)
+    if (dateKey) {
+      leadsByDate.set(dateKey, (leadsByDate.get(dateKey) ?? 0) + 1)
+    }
+  })
+
+  const total = leads.length
+  const qualified = statusCounts.Qualified
+  const booked = statusCounts.Booked
+  const closed = statusCounts.Closed
+
+  return {
+    kpiCards: [
+      { label: 'Total Leads', value: total },
+      { label: 'New Leads', value: statusCounts.New },
+      { label: 'Qualified Leads', value: qualified },
+      { label: 'Booked Leads', value: booked },
+      { label: 'Closed Leads', value: closed },
+      { label: 'Lost Leads', value: statusCounts.Lost },
+    ],
+    qualificationRate: calculatePercentage(qualified, total),
+    bookingRate: calculatePercentage(booked, total),
+    closeRate: calculatePercentage(closed, qualified),
+    temperatureCounts,
+    leadsOverTime: buildLeadsOverTimeData(leadsByDate, timeRange),
+    statusChartData: statusOptions.map((status) => ({
+      status,
+      leads: statusCounts[status],
+    })),
+    serviceTypeChartData: Array.from(serviceTypeCounts.entries())
+      .map(([serviceType, count]) => ({ serviceType, leads: count }))
+      .sort((first, second) => second.leads - first.leads),
+  }
+}
+
+function isLeadInTimeRange(lead: Lead, timeRange: TimeRange) {
+  if (timeRange === 'All Time') {
+    return true
+  }
+
+  const createdAt =
+    typeof lead.created_at === 'string' ? new Date(lead.created_at) : null
+
+  if (!createdAt || Number.isNaN(createdAt.getTime())) {
+    return false
+  }
+
+  const now = new Date()
+  const rangeStart = new Date(now)
+  rangeStart.setHours(0, 0, 0, 0)
+
+  if (timeRange === 'Last 7 days') {
+    rangeStart.setDate(rangeStart.getDate() - 6)
+  }
+
+  if (timeRange === 'Last 30 days') {
+    rangeStart.setDate(rangeStart.getDate() - 29)
+  }
+
+  return createdAt >= rangeStart && createdAt <= now
+}
+
+function buildLeadsOverTimeData(
+  leadsByDate: Map<string, number>,
+  timeRange: TimeRange,
+) {
+  if (timeRange === 'All Time') {
+    return Array.from(leadsByDate.entries())
+      .sort(([firstDate], [secondDate]) => firstDate.localeCompare(secondDate))
+      .map(([dateKey, leads]) => ({
+        label: formatChartDateLabel(dateKey),
+        leads,
+      }))
+  }
+
+  const dayCount =
+    timeRange === 'Today' ? 1 : timeRange === 'Last 7 days' ? 7 : 30
+  const startDate = new Date()
+  startDate.setHours(0, 0, 0, 0)
+  startDate.setDate(startDate.getDate() - (dayCount - 1))
+
+  return Array.from({ length: dayCount }, (_item, index) => {
+    const currentDate = new Date(startDate)
+    currentDate.setDate(startDate.getDate() + index)
+    const dateKey = getDateKey(currentDate.toISOString()) ?? ''
+
+    return {
+      label: formatChartDateLabel(dateKey),
+      leads: leadsByDate.get(dateKey) ?? 0,
+    }
+  })
+}
+
+function calculatePercentage(numerator: number, denominator: number) {
+  if (denominator === 0) {
+    return 0
+  }
+
+  return Math.round((numerator / denominator) * 100)
+}
+
+function getDateKey(value: unknown) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return null
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function formatChartDateLabel(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00`)
+
+  if (Number.isNaN(date.getTime())) {
+    return dateKey
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
+}
+
+function getStatusChartColor(status: string) {
+  const colors: Record<string, string> = {
+    New: '#64748b',
+    Contacted: '#0891b2',
+    Qualified: '#ca8a04',
+    Booked: '#2563eb',
+    Closed: '#16a34a',
+    Lost: '#dc2626',
+  }
+
+  return colors[status] ?? '#334155'
 }
 
 function getLeadKey(lead: Lead) {
