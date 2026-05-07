@@ -1677,29 +1677,34 @@ function LeadDetailModal({
   onClose: () => void
 }) {
   const [notes, setNotes] = useState(lead.notes ?? '')
+  const [copyMessage, setCopyMessage] = useState('')
   const calendlyLink =
     typeof lead.calendly_url === 'string' && lead.calendly_url.length > 0
       ? lead.calendly_url
       : ''
+  const email = typeof lead.email === 'string' ? lead.email.trim() : ''
+  const phone = typeof lead.phone === 'string' ? lead.phone.trim() : ''
+  const isRepeatLead = (lead.submission_count ?? 0) > 1
 
   useEffect(() => {
     setNotes(lead.notes ?? '')
+    setCopyMessage('')
   }, [lead])
 
-  const detailRows = [
-    ['Name', lead.name],
-    ['Email', lead.email],
-    ['Phone', lead.phone],
-    ['Business name', lead.business_name],
-    ['Service type', lead.service_type],
-    ['Lead source', lead.lead_source],
-    ['Response speed', lead.response_speed],
-    ['Submission count', lead.submission_count ?? 0],
-    ['Status', getLeadStatus(lead)],
-    ['Created at', formatDate(lead.created_at)],
-    ['Updated at', formatDate(lead.updated_at)],
-    ['Lead temperature', getLeadTemperature(lead)],
-  ] as const
+  const activityItems = buildLeadActivityItems(lead)
+
+  const handleCopy = async (label: string, value: string) => {
+    if (!value) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopyMessage(`${label} copied.`)
+    } catch {
+      setCopyMessage(`Could not copy ${label.toLowerCase()}.`)
+    }
+  }
 
   return (
     <div
@@ -1707,7 +1712,7 @@ function LeadDetailModal({
       onClick={onClose}
     >
       <div
-        className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl"
+        className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
@@ -1716,6 +1721,11 @@ function LeadDetailModal({
             <h2 className="text-xl font-bold text-slate-950">
               {displayValue(lead.name)}
             </h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <TemperatureBadge temperature={getLeadTemperature(lead)} />
+              {isRepeatLead ? <Badge tone="blue">Repeat lead</Badge> : null}
+              <Badge tone="gray">{getLeadStatus(lead)}</Badge>
+            </div>
           </div>
           <button
             type="button"
@@ -1726,81 +1736,246 @@ function LeadDetailModal({
           </button>
         </div>
 
-        <div className="grid flex-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[1fr_1fr]">
-          <section>
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
-              Lead information
-            </h3>
-            <dl className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-              {detailRows.map(([label, value]) => (
-                <div key={label}>
-                  <dt className="font-semibold text-slate-500">{label}</dt>
-                  <dd className="mt-1 break-words text-slate-900">
-                    {renderUnknownValue(value)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </section>
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap gap-2">
+              <QuickActionLink
+                href={email ? `mailto:${email}` : ''}
+                disabled={!email}
+              >
+                Email lead
+              </QuickActionLink>
+              <QuickActionLink href={phone ? `tel:${phone}` : ''} disabled={!phone}>
+                Call lead
+              </QuickActionLink>
+              <QuickActionLink href={calendlyLink} disabled={!calendlyLink} external>
+                Open Calendly
+              </QuickActionLink>
+              <QuickActionButton
+                disabled={!email}
+                onClick={() => handleCopy('Email', email)}
+              >
+                Copy email
+              </QuickActionButton>
+              <QuickActionButton
+                disabled={!phone}
+                onClick={() => handleCopy('Phone', phone)}
+              >
+                Copy phone
+              </QuickActionButton>
+            </div>
+            {copyMessage ? (
+              <p className="mt-3 text-sm font-medium text-slate-600">
+                {copyMessage}
+              </p>
+            ) : null}
+          </div>
 
-          <section className="space-y-5">
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
-                Calendly URL
-              </h3>
-              {calendlyLink ? (
-                <a
-                  href={calendlyLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 inline-flex max-w-full break-all rounded-md bg-cyan-400 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  {calendlyLink}
-                </a>
-              ) : (
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-                  -
-                </div>
-              )}
+          <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+            <div className="space-y-5">
+              <DetailSection title="Contact">
+                <DetailField label="Name" value={lead.name} />
+                <DetailField label="Email" value={lead.email} />
+                <DetailField label="Phone" value={lead.phone} />
+                <DetailField label="Calendly URL" value={calendlyLink} />
+              </DetailSection>
+
+              <DetailSection title="Business details">
+                <DetailField label="Business name" value={lead.business_name} />
+                <DetailField label="Service type" value={lead.service_type} />
+              </DetailSection>
+
+              <DetailSection title="Qualification answers">
+                <DetailField label="Lead source" value={lead.lead_source} />
+                <DetailField label="Response speed" value={lead.response_speed} />
+                <DetailField
+                  label="Submission count"
+                  value={lead.submission_count ?? 0}
+                />
+              </DetailSection>
             </div>
 
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
-                Notes
-              </h3>
-              <textarea
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Add internal notes for this lead"
-                className="mt-3 min-h-40 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-              />
-              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  disabled={isSavingNote}
-                  onClick={() => onSaveNote(lead, notes)}
-                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSavingNote ? 'Saving...' : 'Save note'}
-                </button>
-                {noteMessage ? (
-                  <p
-                    className={`text-sm font-medium ${
-                      noteMessage.startsWith('Error:')
-                        ? 'text-red-700'
-                        : 'text-emerald-700'
-                    }`}
+            <div className="space-y-5">
+              <DetailSection title="Pipeline">
+                <DetailField label="Status" value={getLeadStatus(lead)} />
+                <DetailField
+                  label="Lead temperature"
+                  value={getLeadTemperature(lead)}
+                />
+                <DetailField label="Created at" value={formatDate(lead.created_at)} />
+                <DetailField label="Updated at" value={formatDate(lead.updated_at)} />
+              </DetailSection>
+
+              <DetailSection title="Notes">
+                <textarea
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Add internal notes for this lead"
+                  className="min-h-40 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                />
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    disabled={isSavingNote}
+                    onClick={() => onSaveNote(lead, notes)}
+                    className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {noteMessage}
-                  </p>
-                ) : null}
-              </div>
+                    {isSavingNote ? 'Saving...' : 'Save note'}
+                  </button>
+                  {noteMessage ? (
+                    <p
+                      className={`text-sm font-medium ${
+                        noteMessage.startsWith('Error:')
+                          ? 'text-red-700'
+                          : 'text-emerald-700'
+                      }`}
+                    >
+                      {noteMessage}
+                    </p>
+                  ) : null}
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Activity timeline">
+                <div className="space-y-4">
+                  {activityItems.map((item) => (
+                    <div key={item.label} className="flex gap-3">
+                      <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-500" />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {item.label}
+                        </p>
+                        <p className="mt-0.5 text-sm text-slate-500">
+                          {item.time}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </DetailSection>
             </div>
-          </section>
+          </div>
         </div>
       </div>
     </div>
   )
+}
+
+function DetailSection({
+  title,
+  children,
+}: {
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+        {title}
+      </h3>
+      <div className="mt-3 space-y-3">{children}</div>
+    </section>
+  )
+}
+
+function DetailField({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+        {label}
+      </p>
+      <div className="mt-1 break-words text-sm font-medium text-slate-900">
+        {renderUnknownValue(value)}
+      </div>
+    </div>
+  )
+}
+
+function QuickActionLink({
+  href,
+  disabled,
+  external = false,
+  children,
+}: {
+  href: string
+  disabled: boolean
+  external?: boolean
+  children: string
+}) {
+  if (disabled) {
+    return (
+      <span className="rounded-md border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-400">
+        {children}
+      </span>
+    )
+  }
+
+  return (
+    <a
+      href={href}
+      target={external ? '_blank' : undefined}
+      rel={external ? 'noopener noreferrer' : undefined}
+      className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+    >
+      {children}
+    </a>
+  )
+}
+
+function QuickActionButton({
+  disabled,
+  onClick,
+  children,
+}: {
+  disabled: boolean
+  onClick: () => void
+  children: string
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+    >
+      {children}
+    </button>
+  )
+}
+
+function buildLeadActivityItems(lead: Lead) {
+  const activityItems = [
+    {
+      label: 'Lead created',
+      time: formatDate(lead.created_at),
+    },
+  ]
+
+  if (lead.updated_at) {
+    activityItems.push({
+      label: 'Last updated',
+      time: formatDate(lead.updated_at),
+    })
+  }
+
+  activityItems.push({
+    label: `Submitted assessment ${lead.submission_count ?? 0} time(s)`,
+    time: formatDate(lead.created_at),
+  })
+
+  activityItems.push({
+    label: `Current status: ${getLeadStatus(lead)}`,
+    time: 'Now',
+  })
+
+  if (typeof lead.notes === 'string' && lead.notes.trim().length > 0) {
+    activityItems.push({
+      label: 'Internal note added',
+      time: formatDate(lead.updated_at ?? lead.created_at),
+    })
+  }
+
+  return activityItems
 }
 
 function TemperatureBadge({ temperature }: { temperature: string }) {
