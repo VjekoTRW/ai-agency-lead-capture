@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import type { MouseEvent } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import type { FormEvent, MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as googleAnalytics from './lib/googleAnalytics'
 import * as metaPixel from './lib/metaPixel'
 
@@ -25,7 +25,90 @@ const responseSpeedParams: Record<string, string> = {
   'Rarely / Never': 'rarely',
 }
 
+type AuthState = 'checking' | 'authenticated' | 'unauthenticated'
+
+type Lead = {
+  id?: string | number
+  name?: string | null
+  email?: string | null
+  phone?: string | null
+  business_name?: string | null
+  service_type?: string | null
+  lead_source?: string | null
+  response_speed?: string | null
+  submission_count?: number | null
+  created_at?: string | null
+  lead_temperature?: string | null
+  status?: string | null
+  calendly_url?: string | null
+  submission_history?: unknown
+  submissions?: unknown
+  full_submission_data?: unknown
+  [key: string]: unknown
+}
+
+const statusOptions = [
+  'New',
+  'Contacted',
+  'Qualified',
+  'Booked',
+  'Closed',
+  'Lost',
+] as const
+
+const temperatureOptions = ['HOT', 'WARM', 'COLD'] as const
+
 function App() {
+  const [path, setPath] = useState(window.location.pathname)
+  const [authState, setAuthState] = useState<AuthState>('checking')
+
+  useEffect(() => {
+    const handlePopState = () => setPath(window.location.pathname)
+    window.addEventListener('popstate', handlePopState)
+
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) {
+        return
+      }
+
+      setAuthState(data.session ? 'authenticated' : 'unauthenticated')
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthState(session ? 'authenticated' : 'unauthenticated')
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const navigate = (nextPath: string) => {
+    window.history.pushState({}, '', nextPath)
+    setPath(nextPath)
+  }
+
+  if (path === '/dashboard') {
+    return <ProtectedDashboard authState={authState} navigate={navigate} />
+  }
+
+  if (path === '/login') {
+    return <LoginPage authState={authState} navigate={navigate} />
+  }
+
+  return <LandingPage />
+}
+
+function LandingPage() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>(
     {},
   )
@@ -770,6 +853,677 @@ function App() {
         </div>
       </section>
     </main>
+  )
+}
+
+function ProtectedDashboard({
+  authState,
+  navigate,
+}: {
+  authState: AuthState
+  navigate: (path: string) => void
+}) {
+  useEffect(() => {
+    if (authState === 'unauthenticated') {
+      navigate('/login')
+    }
+  }, [authState, navigate])
+
+  if (authState !== 'authenticated') {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
+        <div className="rounded-lg border border-slate-800 bg-slate-900 px-6 py-5 text-sm font-medium text-slate-300">
+          Checking your session...
+        </div>
+      </main>
+    )
+  }
+
+  return <DashboardPage navigate={navigate} />
+}
+
+function LoginPage({
+  authState,
+  navigate,
+}: {
+  authState: AuthState
+  navigate: (path: string) => void
+}) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (authState === 'authenticated') {
+      navigate('/dashboard')
+    }
+  }, [authState, navigate])
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    setIsSubmitting(true)
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (signInError) {
+      setError(signInError.message)
+      setIsSubmitting(false)
+      return
+    }
+
+    navigate('/dashboard')
+    setIsSubmitting(false)
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 py-12 text-white">
+      <form
+        onSubmit={handleLogin}
+        className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-black/20"
+      >
+        <div className="mb-6">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+            CRM access
+          </p>
+          <h1 className="mt-2 text-2xl font-bold text-white">
+            Sign in to your dashboard
+          </h1>
+        </div>
+
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-slate-300">
+            Email
+          </span>
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/20"
+            placeholder="you@company.com"
+          />
+        </label>
+
+        <label className="mt-4 block">
+          <span className="mb-2 block text-sm font-medium text-slate-300">
+            Password
+          </span>
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/20"
+            placeholder="Password"
+          />
+        </label>
+
+        {error ? (
+          <div className="mt-4 rounded-md border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-medium text-red-200">
+            {error}
+          </div>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="mt-6 w-full rounded-md bg-cyan-400 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSubmitting ? 'Signing in...' : 'Sign in'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="mt-3 w-full rounded-md border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+        >
+          Back to landing page
+        </button>
+      </form>
+    </main>
+  )
+}
+
+function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [temperatureFilter, setTemperatureFilter] = useState('All')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [updatingLeadKey, setUpdatingLeadKey] = useState<string | null>(null)
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+
+  useEffect(() => {
+    fetchLeads()
+  }, [])
+
+  const fetchLeads = async () => {
+    setLoading(true)
+    setError('')
+
+    const { data, error: leadsError } = await supabase
+      .from('leads')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (leadsError) {
+      setError(leadsError.message)
+      setLeads([])
+    } else {
+      setLeads((data ?? []) as Lead[])
+    }
+
+    setLoading(false)
+  }
+
+  const filteredLeads = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+
+    return leads.filter((lead) => {
+      const searchFields = [
+        lead.name,
+        lead.email,
+        lead.business_name,
+      ]
+        .join(' ')
+        .toLowerCase()
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        searchFields.includes(normalizedSearch)
+      const matchesStatus =
+        statusFilter === 'All' || getLeadStatus(lead) === statusFilter
+      const matchesTemperature =
+        temperatureFilter === 'All' ||
+        getLeadTemperature(lead) === temperatureFilter
+
+      return matchesSearch && matchesStatus && matchesTemperature
+    })
+  }, [leads, searchTerm, statusFilter, temperatureFilter])
+
+  const handleStatusChange = async (lead: Lead, nextStatus: string) => {
+    const leadKey = getLeadKey(lead)
+    setUpdatingLeadKey(leadKey)
+    setError('')
+
+    const query = supabase.from('leads').update({ status: nextStatus })
+    const { error: updateError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (updateError) {
+      setError(updateError.message)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, status: nextStatus }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, status: nextStatus }
+          : currentLead,
+      )
+    }
+
+    setUpdatingLeadKey(null)
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    navigate('/login')
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-100 text-slate-950">
+      <div className="flex min-h-screen flex-col lg:flex-row">
+        <aside className="border-b border-slate-200 bg-slate-950 px-5 py-4 text-white lg:w-64 lg:border-b-0 lg:border-r lg:border-slate-800">
+          <div className="flex items-center justify-between lg:block">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                AI agency
+              </p>
+              <h1 className="mt-2 text-xl font-bold">Lead CRM</h1>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="rounded-md border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 lg:mt-8 lg:w-full"
+            >
+              Landing
+            </button>
+          </div>
+
+          <nav className="mt-5 flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+            <a
+              href="/dashboard"
+              onClick={(event) => {
+                event.preventDefault()
+                navigate('/dashboard')
+              }}
+              className="whitespace-nowrap rounded-md bg-cyan-400 px-3 py-2 text-sm font-bold text-slate-950"
+            >
+              Leads
+            </a>
+          </nav>
+        </aside>
+
+        <section className="min-w-0 flex-1">
+          <header className="border-b border-slate-200 bg-white px-5 py-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500">
+                  Dashboard
+                </p>
+                <h2 className="text-2xl font-bold text-slate-950">
+                  Lead pipeline
+                </h2>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={fetchLeads}
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <div className="px-5 py-5">
+            <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr_180px_180px]">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Search
+                </span>
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  placeholder="Name, email, or business"
+                />
+              </label>
+
+              <FilterSelect
+                label="Status"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={['All', ...statusOptions]}
+              />
+
+              <FilterSelect
+                label="Temperature"
+                value={temperatureFilter}
+                onChange={setTemperatureFilter}
+                options={['All', ...temperatureOptions]}
+              />
+            </div>
+
+            {error ? (
+              <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {error}
+              </div>
+            ) : null}
+
+            <div className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              {loading ? (
+                <div className="p-8 text-center text-sm font-medium text-slate-500">
+                  Loading leads...
+                </div>
+              ) : filteredLeads.length === 0 ? (
+                <div className="p-8 text-center text-sm font-medium text-slate-500">
+                  No leads match the current filters.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-[1180px] w-full text-left text-sm">
+                    <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Name</th>
+                        <th className="px-4 py-3">Email</th>
+                        <th className="px-4 py-3">Phone</th>
+                        <th className="px-4 py-3">Business Name</th>
+                        <th className="px-4 py-3">Service Type</th>
+                        <th className="px-4 py-3">Lead Source</th>
+                        <th className="px-4 py-3">Response Speed</th>
+                        <th className="px-4 py-3">submission_count</th>
+                        <th className="px-4 py-3">created_at</th>
+                        <th className="px-4 py-3">lead_temperature</th>
+                        <th className="px-4 py-3">status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredLeads.map((lead) => (
+                        <tr
+                          key={getLeadKey(lead)}
+                          className="align-top transition hover:bg-slate-50"
+                        >
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedLead(lead)}
+                              className="font-semibold text-cyan-700 hover:text-cyan-900"
+                            >
+                              {displayValue(lead.name)}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {displayValue(lead.email)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {displayValue(lead.phone)}
+                          </td>
+                          <td className="px-4 py-3 font-medium">
+                            {displayValue(lead.business_name)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {displayValue(lead.service_type)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {displayValue(lead.lead_source)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {displayValue(lead.response_speed)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span>{lead.submission_count ?? 0}</span>
+                              {(lead.submission_count ?? 0) > 1 ? (
+                                <Badge tone="blue">Repeat lead</Badge>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {formatDate(lead.created_at)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <TemperatureBadge
+                              temperature={getLeadTemperature(lead)}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <select
+                              value={getLeadStatus(lead)}
+                              disabled={updatingLeadKey === getLeadKey(lead)}
+                              onChange={(event) =>
+                                handleStatusChange(lead, event.target.value)
+                              }
+                              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-700 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:opacity-60"
+                            >
+                              {statusOptions.map((status) => (
+                                <option key={status} value={status}>
+                                  {status}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {selectedLead ? (
+        <LeadDetailModal
+          lead={selectedLead}
+          onClose={() => setSelectedLead(null)}
+        />
+      ) : null}
+    </main>
+  )
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: readonly string[]
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function LeadDetailModal({
+  lead,
+  onClose,
+}: {
+  lead: Lead
+  onClose: () => void
+}) {
+  const history = lead.submission_history ?? lead.submissions ?? []
+  const calendlyLink =
+    typeof lead.calendly_url === 'string' && lead.calendly_url.length > 0
+      ? lead.calendly_url
+      : bookingUrl
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 px-4 py-8">
+      <div className="w-full max-w-4xl rounded-lg bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-slate-500">Lead detail</p>
+            <h2 className="text-xl font-bold text-slate-950">
+              {displayValue(lead.name)}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="grid gap-5 p-5 lg:grid-cols-[1fr_1fr]">
+          <section>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+              Full submission data
+            </h3>
+            <dl className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+              {Object.entries(lead).map(([key, value]) => (
+                <div key={key}>
+                  <dt className="font-semibold text-slate-500">{key}</dt>
+                  <dd className="mt-1 break-words text-slate-900">
+                    {renderUnknownValue(value)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section className="space-y-5">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+                Submission history
+              </h3>
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                {renderUnknownValue(history)}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+                Calendly link
+              </h3>
+              <a
+                href={calendlyLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex max-w-full break-all rounded-md bg-cyan-400 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
+              >
+                {calendlyLink}
+              </a>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+                Notes
+              </h3>
+              <textarea
+                disabled
+                value=""
+                placeholder="Notes section placeholder"
+                className="mt-3 min-h-36 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500"
+              />
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TemperatureBadge({ temperature }: { temperature: string }) {
+  if (temperature === 'HOT') {
+    return <Badge tone="red">HOT</Badge>
+  }
+
+  if (temperature === 'WARM') {
+    return <Badge tone="yellow">WARM</Badge>
+  }
+
+  return <Badge tone="gray">{temperature || 'COLD'}</Badge>
+}
+
+function Badge({
+  tone,
+  children,
+}: {
+  tone: 'red' | 'yellow' | 'gray' | 'blue'
+  children: string
+}) {
+  const classes = {
+    red: 'border-red-200 bg-red-50 text-red-700',
+    yellow: 'border-yellow-200 bg-yellow-50 text-yellow-800',
+    gray: 'border-slate-200 bg-slate-100 text-slate-700',
+    blue: 'border-blue-200 bg-blue-50 text-blue-700',
+  }
+
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-bold ${classes[tone]}`}
+    >
+      {children}
+    </span>
+  )
+}
+
+function getLeadKey(lead: Lead) {
+  return String(lead.id ?? lead.email ?? `${lead.name}-${lead.created_at}`)
+}
+
+function getLeadStatus(lead: Lead) {
+  const status = typeof lead.status === 'string' ? lead.status : ''
+  return statusOptions.includes(status as (typeof statusOptions)[number])
+    ? status
+    : 'New'
+}
+
+function getLeadTemperature(lead: Lead) {
+  const explicitTemperature =
+    typeof lead.lead_temperature === 'string'
+      ? lead.lead_temperature.toUpperCase()
+      : ''
+
+  if (temperatureOptions.includes(explicitTemperature as 'HOT' | 'WARM' | 'COLD')) {
+    return explicitTemperature
+  }
+
+  if (lead.response_speed === 'Frequently') {
+    return 'HOT'
+  }
+
+  if (lead.response_speed === 'Sometimes') {
+    return 'WARM'
+  }
+
+  return 'COLD'
+}
+
+function displayValue(value: unknown) {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value
+  }
+
+  if (typeof value === 'number') {
+    return String(value)
+  }
+
+  return '-'
+}
+
+function formatDate(value: unknown) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return '-'
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function renderUnknownValue(value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    return '-'
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value)
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false'
+  }
+
+  return (
+    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-slate-700">
+      {JSON.stringify(value, null, 2)}
+    </pre>
   )
 }
 
