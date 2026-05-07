@@ -1486,7 +1486,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-slate-600">
-                            {formatDate(lead.created_at)}
+                            {formatTorontoDate(lead.created_at)}
                           </td>
                           <td className="px-4 py-3">
                             <TemperatureBadge
@@ -1685,8 +1685,8 @@ function LeadDetailModal({
   const [notes, setNotes] = useState(lead.notes ?? '')
   const [copyMessage, setCopyMessage] = useState('')
   const calendlyLink =
-    typeof lead.calendly_url === 'string' && lead.calendly_url.length > 0
-      ? lead.calendly_url
+    typeof lead.calendly_url === 'string' && lead.calendly_url.trim().length > 0
+      ? lead.calendly_url.trim()
       : ''
   const email = typeof lead.email === 'string' ? lead.email.trim() : ''
   const phone = typeof lead.phone === 'string' ? lead.phone.trim() : ''
@@ -1783,7 +1783,7 @@ function LeadDetailModal({
                 <DetailField label="Name" value={lead.name} />
                 <DetailField label="Email" value={lead.email} />
                 <DetailField label="Phone" value={lead.phone} />
-                <DetailField label="Calendly URL" value={calendlyLink} />
+                <DetailLinkField label="Calendly URL" href={calendlyLink} />
               </DetailSection>
 
               <DetailSection title="Business details">
@@ -1808,8 +1808,14 @@ function LeadDetailModal({
                   label="Lead temperature"
                   value={getLeadTemperature(lead)}
                 />
-                <DetailField label="Created at" value={formatDate(lead.created_at)} />
-                <DetailField label="Updated at" value={formatDate(lead.updated_at)} />
+                <DetailField
+                  label="Created at"
+                  value={formatTorontoDate(lead.created_at)}
+                />
+                <DetailField
+                  label="Updated at"
+                  value={formatTorontoDate(lead.updated_at)}
+                />
               </DetailSection>
 
               <DetailSection title="Notes">
@@ -1897,6 +1903,28 @@ function DetailField({ label, value }: { label: string; value: unknown }) {
   )
 }
 
+function DetailLinkField({ label, href }: { label: string; href: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+        {label}
+      </p>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 block break-words text-sm font-semibold text-cyan-700 hover:text-cyan-900"
+        >
+          {href}
+        </a>
+      ) : (
+        <p className="mt-1 text-sm font-medium text-slate-900">-</p>
+      )}
+    </div>
+  )
+}
+
 function QuickActionLink({
   href,
   disabled,
@@ -1953,20 +1981,20 @@ function buildLeadActivityItems(lead: Lead) {
   const activityItems = [
     {
       label: 'Lead created',
-      time: formatDate(lead.created_at),
+      time: formatTorontoDate(lead.created_at),
     },
   ]
 
   if (lead.updated_at) {
     activityItems.push({
       label: 'Last updated',
-      time: formatDate(lead.updated_at),
+      time: formatTorontoDate(lead.updated_at),
     })
   }
 
   activityItems.push({
     label: `Submitted assessment ${lead.submission_count ?? 0} time(s)`,
-    time: formatDate(lead.created_at),
+    time: formatTorontoDate(lead.created_at),
   })
 
   activityItems.push({
@@ -1977,7 +2005,7 @@ function buildLeadActivityItems(lead: Lead) {
   if (typeof lead.notes === 'string' && lead.notes.trim().length > 0) {
     activityItems.push({
       label: 'Internal note added',
-      time: formatDate(lead.updated_at ?? lead.created_at),
+      time: formatTorontoDate(lead.updated_at ?? lead.created_at),
     })
   }
 
@@ -2113,12 +2141,13 @@ function isLeadInTimeRange(lead: Lead, timeRange: TimeRange) {
     return false
   }
 
-  const parsedDate = new Date(lead.created_at)
-  const leadTime = parsedDate.getTime()
+  const parsedDate = parseSupabaseTimestamp(lead.created_at)
+  const parsedDateForLog = parsedDate ?? 'invalid'
+  const leadTime = parsedDate?.getTime() ?? Number.NaN
 
   if (Number.isNaN(leadTime)) {
     console.log('lead.created_at', lead.created_at)
-    console.log('parsed Date value', parsedDate)
+    console.log('parsed Date value', parsedDateForLog)
     console.log('cutoff Date value', 'not evaluated')
     console.log('passes performance window filter', false)
 
@@ -2141,7 +2170,7 @@ function isLeadInTimeRange(lead: Lead, timeRange: TimeRange) {
   const passesFilter = leadTime >= cutoffTime
 
   console.log('lead.created_at', lead.created_at)
-  console.log('parsed Date value', parsedDate)
+  console.log('parsed Date value', parsedDateForLog)
   console.log('cutoff Date value', start)
   console.log('passes performance window filter', passesFilter)
 
@@ -2200,13 +2229,9 @@ function getLocalDateKey(date: Date) {
 }
 
 function getDateKey(value: unknown) {
-  if (typeof value !== 'string' || value.length === 0) {
-    return null
-  }
+  const date = parseSupabaseTimestamp(value)
 
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
+  if (!date) {
     return null
   }
 
@@ -2283,14 +2308,29 @@ function displayValue(value: unknown) {
   return '-'
 }
 
-function formatDate(value: unknown) {
-  if (typeof value !== 'string' || value.length === 0) {
-    return '-'
+function parseSupabaseTimestamp(timestamp: unknown) {
+  if (typeof timestamp !== 'string' || timestamp.trim().length === 0) {
+    return null
   }
 
-  const date = new Date(value)
+  const normalizedTimestamp = timestamp.trim().replace(' ', 'T')
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalizedTimestamp)
+  const timestampToParse = hasTimezone
+    ? normalizedTimestamp
+    : `${normalizedTimestamp}Z`
+  const date = new Date(timestampToParse)
 
   if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return date
+}
+
+function formatTorontoDate(timestamp: unknown) {
+  const date = parseSupabaseTimestamp(timestamp)
+
+  if (!date) {
     return '-'
   }
 
