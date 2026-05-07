@@ -1916,23 +1916,31 @@ function isLeadInTimeRange(lead: Lead, timeRange: TimeRange) {
     return true
   }
 
-  const createdAt =
-    typeof lead.created_at === 'string' ? new Date(lead.created_at) : null
+  if (typeof lead.created_at !== 'string' || lead.created_at.length === 0) {
+    return false
+  }
 
-  if (!createdAt || Number.isNaN(createdAt.getTime())) {
+  const createdAt = new Date(lead.created_at)
+
+  if (Number.isNaN(createdAt.getTime())) {
     return false
   }
 
   const now = new Date()
-  const rangeStart = new Date(now)
-  rangeStart.setHours(0, 0, 0, 0)
 
-  if (timeRange === 'Last 7 days') {
-    rangeStart.setDate(rangeStart.getDate() - 6)
+  if (timeRange === 'Today') {
+    const startOfToday = new Date(now)
+    startOfToday.setHours(0, 0, 0, 0)
+
+    return createdAt >= startOfToday && createdAt <= now
   }
 
-  if (timeRange === 'Last 30 days') {
-    rangeStart.setDate(rangeStart.getDate() - 29)
+  const rangeStart = new Date(now)
+
+  if (timeRange === 'Last 7 days') {
+    rangeStart.setDate(rangeStart.getDate() - 7)
+  } else if (timeRange === 'Last 30 days') {
+    rangeStart.setDate(rangeStart.getDate() - 30)
   }
 
   return createdAt >= rangeStart && createdAt <= now
@@ -1944,7 +1952,11 @@ function buildLeadsOverTimeData(
 ) {
   if (timeRange === 'All Time') {
     return Array.from(leadsByDate.entries())
-      .sort(([firstDate], [secondDate]) => firstDate.localeCompare(secondDate))
+      .sort(
+        ([firstDate], [secondDate]) =>
+          new Date(`${firstDate}T00:00:00`).getTime() -
+          new Date(`${secondDate}T00:00:00`).getTime(),
+      )
       .map(([dateKey, leads]) => ({
         label: formatChartDateLabel(dateKey),
         leads,
@@ -1952,7 +1964,7 @@ function buildLeadsOverTimeData(
   }
 
   const dayCount =
-    timeRange === 'Today' ? 1 : timeRange === 'Last 7 days' ? 7 : 30
+    timeRange === 'Today' ? 1 : timeRange === 'Last 7 days' ? 8 : 31
   const startDate = new Date()
   startDate.setHours(0, 0, 0, 0)
   startDate.setDate(startDate.getDate() - (dayCount - 1))
@@ -1960,7 +1972,7 @@ function buildLeadsOverTimeData(
   return Array.from({ length: dayCount }, (_item, index) => {
     const currentDate = new Date(startDate)
     currentDate.setDate(startDate.getDate() + index)
-    const dateKey = getDateKey(currentDate.toISOString()) ?? ''
+    const dateKey = getLocalDateKey(currentDate)
 
     return {
       label: formatChartDateLabel(dateKey),
@@ -1977,6 +1989,14 @@ function calculatePercentage(numerator: number, denominator: number) {
   return Math.round((numerator / denominator) * 100)
 }
 
+function getLocalDateKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
 function getDateKey(value: unknown) {
   if (typeof value !== 'string' || value.length === 0) {
     return null
@@ -1988,11 +2008,7 @@ function getDateKey(value: unknown) {
     return null
   }
 
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
+  return getLocalDateKey(date)
 }
 
 function formatChartDateLabel(dateKey: string) {
