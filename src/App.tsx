@@ -1785,7 +1785,7 @@ function LeadDetailModal({
                 <DetailField label="Name" value={lead.name} />
                 <DetailField label="Email" value={lead.email} />
                 <DetailField label="Phone" value={lead.phone} />
-                <DetailLinkField label="Calendly URL" href={calendlyLink} />
+                <DetailLinkField label="Booking Link" href={calendlyLink} />
               </DetailSection>
 
               <DetailSection title="Business details">
@@ -1987,12 +1987,10 @@ function buildLeadActivityItems(lead: Lead) {
     },
   ]
 
-  if (lead.updated_at) {
-    activityItems.push({
-      label: 'Last updated',
-      time: formatTorontoDate(lead.updated_at),
-    })
-  }
+  activityItems.push({
+    label: 'Last updated',
+    time: formatTorontoDate(lead.updated_at),
+  })
 
   activityItems.push({
     label: `Submitted assessment ${lead.submission_count ?? 0} time(s)`,
