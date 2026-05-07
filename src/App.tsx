@@ -1912,38 +1912,59 @@ function buildDashboardAnalytics(
 }
 
 function isLeadInTimeRange(lead: Lead, timeRange: TimeRange) {
+  console.log('selectedPerformanceWindow', timeRange)
+
   if (timeRange === 'All Time') {
+    console.log('lead.created_at', lead.created_at)
+    console.log('parsed Date value', 'not required for All Time')
+    console.log('cutoff Date value', 'none')
+    console.log('passes performance window filter', true)
+
     return true
   }
 
   if (typeof lead.created_at !== 'string' || lead.created_at.length === 0) {
+    console.log('lead.created_at', lead.created_at)
+    console.log('parsed Date value', 'invalid')
+    console.log('cutoff Date value', 'not evaluated')
+    console.log('passes performance window filter', false)
+
     return false
   }
 
-  const createdAt = new Date(lead.created_at)
+  const parsedDate = new Date(lead.created_at)
+  const leadTime = parsedDate.getTime()
 
-  if (Number.isNaN(createdAt.getTime())) {
+  if (Number.isNaN(leadTime)) {
+    console.log('lead.created_at', lead.created_at)
+    console.log('parsed Date value', parsedDate)
+    console.log('cutoff Date value', 'not evaluated')
+    console.log('passes performance window filter', false)
+
     return false
   }
 
-  const now = new Date()
+  const start = new Date()
 
   if (timeRange === 'Today') {
-    const startOfToday = new Date(now)
-    startOfToday.setHours(0, 0, 0, 0)
-
-    return createdAt >= startOfToday && createdAt <= now
-  }
-
-  const rangeStart = new Date(now)
-
-  if (timeRange === 'Last 7 days') {
-    rangeStart.setDate(rangeStart.getDate() - 7)
+    start.setHours(0, 0, 0, 0)
+  } else if (timeRange === 'Last 7 days') {
+    start.setDate(start.getDate() - 7)
+    start.setHours(0, 0, 0, 0)
   } else if (timeRange === 'Last 30 days') {
-    rangeStart.setDate(rangeStart.getDate() - 30)
+    start.setDate(start.getDate() - 30)
+    start.setHours(0, 0, 0, 0)
   }
 
-  return createdAt >= rangeStart && createdAt <= now
+  const cutoffTime = start.getTime()
+  const passesFilter = leadTime >= cutoffTime
+
+  console.log('lead.created_at', lead.created_at)
+  console.log('parsed Date value', parsedDate)
+  console.log('cutoff Date value', start)
+  console.log('passes performance window filter', passesFilter)
+
+  return passesFilter
 }
 
 function buildLeadsOverTimeData(
