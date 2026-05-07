@@ -999,10 +999,6 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [updatingLeadKey, setUpdatingLeadKey] = useState<string | null>(null)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
 
-  useEffect(() => {
-    fetchLeads()
-  }, [])
-
   const fetchLeads = async () => {
     setLoading(true)
     setError('')
@@ -1021,6 +1017,10 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
 
     setLoading(false)
   }
+
+  useEffect(() => {
+    fetchLeads()
+  }, [])
 
   const filteredLeads = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
