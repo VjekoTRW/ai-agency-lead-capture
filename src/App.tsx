@@ -40,6 +40,7 @@ type Lead = {
   created_at?: string | null
   lead_temperature?: string | null
   status?: string | null
+  notes?: string | null
   calendly_url?: string | null
   submission_history?: unknown
   submissions?: unknown
@@ -998,6 +999,8 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [error, setError] = useState('')
   const [updatingLeadKey, setUpdatingLeadKey] = useState<string | null>(null)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [savingNoteLeadKey, setSavingNoteLeadKey] = useState<string | null>(null)
+  const [noteMessage, setNoteMessage] = useState('')
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -1075,6 +1078,38 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     }
 
     setUpdatingLeadKey(null)
+  }
+
+  const handleSaveNote = async (lead: Lead, notes: string) => {
+    const leadKey = getLeadKey(lead)
+    setSavingNoteLeadKey(leadKey)
+    setNoteMessage('')
+
+    const query = supabase.from('leads').update({ notes })
+    const { error: noteError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (noteError) {
+      setNoteMessage(`Error: ${noteError.message}`)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, notes }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, notes }
+          : currentLead,
+      )
+      setNoteMessage('Note saved.')
+    }
+
+    setSavingNoteLeadKey(null)
   }
 
   const handleSignOut = async () => {
@@ -1213,16 +1248,16 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                       {filteredLeads.map((lead) => (
                         <tr
                           key={getLeadKey(lead)}
-                          className="align-top transition hover:bg-slate-50"
+                          onClick={() => {
+                            setSelectedLead(lead)
+                            setNoteMessage('')
+                          }}
+                          className="cursor-pointer align-top transition hover:bg-slate-50"
                         >
                           <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedLead(lead)}
-                              className="font-semibold text-cyan-700 hover:text-cyan-900"
-                            >
+                            <span className="font-semibold text-cyan-700">
                               {displayValue(lead.name)}
-                            </button>
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-slate-600">
                             {displayValue(lead.email)}
@@ -1262,6 +1297,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             <select
                               value={getLeadStatus(lead)}
                               disabled={updatingLeadKey === getLeadKey(lead)}
+                              onClick={(event) => event.stopPropagation()}
                               onChange={(event) =>
                                 handleStatusChange(lead, event.target.value)
                               }
@@ -1288,6 +1324,9 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       {selectedLead ? (
         <LeadDetailModal
           lead={selectedLead}
+          isSavingNote={savingNoteLeadKey === getLeadKey(selectedLead)}
+          noteMessage={noteMessage}
+          onSaveNote={handleSaveNote}
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
@@ -1328,20 +1367,51 @@ function FilterSelect({
 
 function LeadDetailModal({
   lead,
+  isSavingNote,
+  noteMessage,
+  onSaveNote,
   onClose,
 }: {
   lead: Lead
+  isSavingNote: boolean
+  noteMessage: string
+  onSaveNote: (lead: Lead, notes: string) => Promise<void>
   onClose: () => void
 }) {
-  const history = lead.submission_history ?? lead.submissions ?? []
+  const [notes, setNotes] = useState(lead.notes ?? '')
   const calendlyLink =
     typeof lead.calendly_url === 'string' && lead.calendly_url.length > 0
       ? lead.calendly_url
-      : bookingUrl
+      : ''
+
+  useEffect(() => {
+    setNotes(lead.notes ?? '')
+  }, [lead])
+
+  const detailRows = [
+    ['Name', lead.name],
+    ['Email', lead.email],
+    ['Phone', lead.phone],
+    ['Business name', lead.business_name],
+    ['Service type', lead.service_type],
+    ['Lead source', lead.lead_source],
+    ['Response speed', lead.response_speed],
+    ['Submission count', lead.submission_count ?? 0],
+    ['Status', getLeadStatus(lead)],
+    ['Created at', formatDate(lead.created_at)],
+    ['Updated at', formatDate(lead.updated_at)],
+    ['Lead temperature', getLeadTemperature(lead)],
+  ] as const
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 px-4 py-8">
-      <div className="w-full max-w-4xl rounded-lg bg-white shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-stretch justify-end bg-slate-950/70 lg:pl-24"
+      onClick={onClose}
+    >
+      <div
+        className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div>
             <p className="text-sm font-medium text-slate-500">Lead detail</p>
@@ -1358,15 +1428,15 @@ function LeadDetailModal({
           </button>
         </div>
 
-        <div className="grid gap-5 p-5 lg:grid-cols-[1fr_1fr]">
+        <div className="grid flex-1 gap-5 overflow-y-auto p-5 lg:grid-cols-[1fr_1fr]">
           <section>
             <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
-              Full submission data
+              Lead information
             </h3>
             <dl className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-              {Object.entries(lead).map(([key, value]) => (
-                <div key={key}>
-                  <dt className="font-semibold text-slate-500">{key}</dt>
+              {detailRows.map(([label, value]) => (
+                <div key={label}>
+                  <dt className="font-semibold text-slate-500">{label}</dt>
                   <dd className="mt-1 break-words text-slate-900">
                     {renderUnknownValue(value)}
                   </dd>
@@ -1378,25 +1448,22 @@ function LeadDetailModal({
           <section className="space-y-5">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
-                Submission history
+                Calendly URL
               </h3>
-              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                {renderUnknownValue(history)}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
-                Calendly link
-              </h3>
-              <a
-                href={calendlyLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex max-w-full break-all rounded-md bg-cyan-400 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
-              >
-                {calendlyLink}
-              </a>
+              {calendlyLink ? (
+                <a
+                  href={calendlyLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex max-w-full break-all rounded-md bg-cyan-400 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  {calendlyLink}
+                </a>
+              ) : (
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                  -
+                </div>
+              )}
             </div>
 
             <div>
@@ -1404,11 +1471,32 @@ function LeadDetailModal({
                 Notes
               </h3>
               <textarea
-                disabled
-                value=""
-                placeholder="Notes section placeholder"
-                className="mt-3 min-h-36 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Add internal notes for this lead"
+                className="mt-3 min-h-40 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
               />
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingNote}
+                  onClick={() => onSaveNote(lead, notes)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingNote ? 'Saving...' : 'Save note'}
+                </button>
+                {noteMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      noteMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {noteMessage}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </section>
         </div>
