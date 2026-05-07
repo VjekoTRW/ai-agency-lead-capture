@@ -1757,7 +1757,7 @@ function LeadDetailModal({
                 Call lead
               </QuickActionLink>
               <QuickActionLink href={calendlyLink} disabled={!calendlyLink} external>
-                Open Calendly
+                Open Booking Link
               </QuickActionLink>
               <QuickActionButton
                 disabled={!email}
@@ -1779,32 +1779,36 @@ function LeadDetailModal({
             ) : null}
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-            <div className="space-y-5">
-              <DetailSection title="Contact">
+          <div className="space-y-5">
+            <DetailSection title="Contact">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Name" value={lead.name} />
                 <DetailField label="Email" value={lead.email} />
                 <DetailField label="Phone" value={lead.phone} />
                 <DetailLinkField label="Booking Link" href={calendlyLink} />
-              </DetailSection>
+              </div>
+            </DetailSection>
 
-              <DetailSection title="Business details">
+            <DetailSection title="Business details">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Business name" value={lead.business_name} />
                 <DetailField label="Service type" value={lead.service_type} />
-              </DetailSection>
+              </div>
+            </DetailSection>
 
-              <DetailSection title="Qualification answers">
+            <DetailSection title="Qualification answers">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <DetailField label="Lead source" value={lead.lead_source} />
                 <DetailField label="Response speed" value={lead.response_speed} />
                 <DetailField
                   label="Submission count"
                   value={lead.submission_count ?? 0}
                 />
-              </DetailSection>
-            </div>
+              </div>
+            </DetailSection>
 
-            <div className="space-y-5">
-              <DetailSection title="Pipeline">
+            <DetailSection title="Pipeline">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
                 <DetailField
                   label="Lead temperature"
@@ -1818,56 +1822,56 @@ function LeadDetailModal({
                   label="Updated at"
                   value={formatTorontoDate(lead.updated_at)}
                 />
-              </DetailSection>
+              </div>
+            </DetailSection>
 
-              <DetailSection title="Notes">
-                <textarea
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  placeholder="Add internal notes for this lead"
-                  className="min-h-40 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                />
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <button
-                    type="button"
-                    disabled={isSavingNote}
-                    onClick={() => onSaveNote(lead, notes)}
-                    className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            <DetailSection title="Notes">
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Add internal notes for this lead"
+                className="min-h-40 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+              />
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingNote}
+                  onClick={() => onSaveNote(lead, notes)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingNote ? 'Saving...' : 'Save note'}
+                </button>
+                {noteMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      noteMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
                   >
-                    {isSavingNote ? 'Saving...' : 'Save note'}
-                  </button>
-                  {noteMessage ? (
-                    <p
-                      className={`text-sm font-medium ${
-                        noteMessage.startsWith('Error:')
-                          ? 'text-red-700'
-                          : 'text-emerald-700'
-                      }`}
-                    >
-                      {noteMessage}
-                    </p>
-                  ) : null}
-                </div>
-              </DetailSection>
+                    {noteMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
 
-              <DetailSection title="Activity timeline">
-                <div className="space-y-4">
-                  {activityItems.map((item) => (
-                    <div key={item.label} className="flex gap-3">
-                      <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-500" />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {item.label}
-                        </p>
-                        <p className="mt-0.5 text-sm text-slate-500">
-                          {item.time}
-                        </p>
-                      </div>
+            <DetailSection title="Activity timeline">
+              <div className="space-y-4">
+                {activityItems.map((item) => (
+                  <div key={item.label} className="flex gap-3">
+                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-500" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {item.label}
+                      </p>
+                      <p className="mt-0.5 text-sm text-slate-500">
+                        {item.time}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </DetailSection>
-            </div>
+                  </div>
+                ))}
+              </div>
+            </DetailSection>
           </div>
         </div>
       </div>
