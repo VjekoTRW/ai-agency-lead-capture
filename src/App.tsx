@@ -57,6 +57,10 @@ type Lead = {
   booked_at?: string | null
   appointment_notes?: string | null
   appointment_status?: string | null
+  follow_up_at?: string | null
+  follow_up_type?: string | null
+  follow_up_status?: string | null
+  follow_up_notes?: string | null
   calendly_url?: string | null
   submission_history?: unknown
   submissions?: unknown
@@ -80,6 +84,15 @@ const appointmentStatusOptions = [
   'Cancelled',
   'No-show',
 ] as const
+
+const followUpStatusOptions = [
+  'Not set',
+  'Pending',
+  'Completed',
+  'Snoozed',
+] as const
+
+const followUpTypeOptions = ['Call', 'Email', 'Text', 'Other'] as const
 
 const appointmentHourOptions = [
   '01',
@@ -1058,8 +1071,12 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [savingAppointmentLeadKey, setSavingAppointmentLeadKey] = useState<
     string | null
   >(null)
+  const [savingFollowUpLeadKey, setSavingFollowUpLeadKey] = useState<
+    string | null
+  >(null)
   const [noteMessage, setNoteMessage] = useState('')
   const [appointmentMessage, setAppointmentMessage] = useState('')
+  const [followUpMessage, setFollowUpMessage] = useState('')
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -1242,6 +1259,63 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     setSavingAppointmentLeadKey(null)
   }
 
+  const handleSaveFollowUp = async (
+    lead: Lead,
+    followUp: {
+      followUpStatus: string
+      followUpType: string
+      followUpAtDate: string
+      followUpAtHour: string
+      followUpAtMinute: string
+      followUpAtPeriod: string
+      followUpNotes: string
+    },
+  ) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+    const followUpPayload = {
+      follow_up_status: getValidFollowUpStatus(followUp.followUpStatus),
+      follow_up_type: getValidFollowUpType(followUp.followUpType),
+      follow_up_at: parseTorontoDateTimeFields({
+        date: followUp.followUpAtDate,
+        hour: followUp.followUpAtHour,
+        minute: followUp.followUpAtMinute,
+        period: followUp.followUpAtPeriod,
+      }),
+      follow_up_notes: followUp.followUpNotes,
+      updated_at: updatedAt,
+    }
+
+    setSavingFollowUpLeadKey(leadKey)
+    setFollowUpMessage('')
+
+    const query = supabase.from('leads').update(followUpPayload)
+    const { error: followUpError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (followUpError) {
+      setFollowUpMessage(`Error: ${followUpError.message}`)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, ...followUpPayload }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, ...followUpPayload }
+          : currentLead,
+      )
+      setFollowUpMessage('Follow-up saved.')
+    }
+
+    setSavingFollowUpLeadKey(null)
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     navigate('/login')
@@ -1339,7 +1413,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-9">
               {dashboardAnalytics.kpiCards.map((card) => (
                 <KpiCard
                   key={card.label}
@@ -1519,7 +1593,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-[1320px] w-full text-left text-sm">
+                  <table className="min-w-[1540px] w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
                       <tr>
                         <th className="px-4 py-3">Name</th>
@@ -1533,6 +1607,8 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                         <th className="px-4 py-3">created_at</th>
                         <th className="px-4 py-3">lead_temperature</th>
                         <th className="px-4 py-3">appointment_status</th>
+                        <th className="px-4 py-3">Follow-Up Status</th>
+                        <th className="px-4 py-3">Next Follow-Up</th>
                         <th className="px-4 py-3">status</th>
                       </tr>
                     </thead>
@@ -1544,6 +1620,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             setSelectedLead(lead)
                             setNoteMessage('')
                             setAppointmentMessage('')
+                            setFollowUpMessage('')
                           }}
                           className="cursor-pointer align-top transition hover:bg-slate-50"
                         >
@@ -1592,6 +1669,12 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             </Badge>
                           </td>
                           <td className="px-4 py-3">
+                            <FollowUpBadge lead={lead} />
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {formatTorontoDate(lead.follow_up_at)}
+                          </td>
+                          <td className="px-4 py-3">
                             <select
                               value={getLeadStatus(lead)}
                               disabled={updatingLeadKey === getLeadKey(lead)}
@@ -1626,10 +1709,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
           isSavingAppointment={
             savingAppointmentLeadKey === getLeadKey(selectedLead)
           }
+          isSavingFollowUp={savingFollowUpLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
           appointmentMessage={appointmentMessage}
+          followUpMessage={followUpMessage}
           onSaveNote={handleSaveNote}
           onSaveAppointment={handleSaveAppointment}
+          onSaveFollowUp={handleSaveFollowUp}
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
@@ -1776,17 +1862,22 @@ function LeadDetailModal({
   lead,
   isSavingNote,
   isSavingAppointment,
+  isSavingFollowUp,
   noteMessage,
   appointmentMessage,
+  followUpMessage,
   onSaveNote,
   onSaveAppointment,
+  onSaveFollowUp,
   onClose,
 }: {
   lead: Lead
   isSavingNote: boolean
   isSavingAppointment: boolean
+  isSavingFollowUp: boolean
   noteMessage: string
   appointmentMessage: string
+  followUpMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
   onSaveAppointment: (
     lead: Lead,
@@ -1797,6 +1888,18 @@ function LeadDetailModal({
       bookedAtMinute: string
       bookedAtPeriod: string
       appointmentNotes: string
+    },
+  ) => Promise<void>
+  onSaveFollowUp: (
+    lead: Lead,
+    followUp: {
+      followUpStatus: string
+      followUpType: string
+      followUpAtDate: string
+      followUpAtHour: string
+      followUpAtMinute: string
+      followUpAtPeriod: string
+      followUpNotes: string
     },
   ) => Promise<void>
   onClose: () => void
@@ -1811,6 +1914,12 @@ function LeadDetailModal({
   const [appointmentNotes, setAppointmentNotes] = useState(
     lead.appointment_notes ?? '',
   )
+  const [followUpStatus, setFollowUpStatus] = useState(getFollowUpStatus(lead))
+  const [followUpType, setFollowUpType] = useState(getFollowUpType(lead))
+  const [followUpAtFields, setFollowUpAtFields] = useState(() =>
+    formatAppointmentFields(lead.follow_up_at),
+  )
+  const [followUpNotes, setFollowUpNotes] = useState(lead.follow_up_notes ?? '')
   const [copyMessage, setCopyMessage] = useState('')
   const calendlyLink =
     typeof lead.calendly_url === 'string' && lead.calendly_url.trim().length > 0
@@ -1825,6 +1934,10 @@ function LeadDetailModal({
     setAppointmentStatus(getAppointmentStatus(lead))
     setBookedAtFields(formatAppointmentFields(lead.booked_at))
     setAppointmentNotes(lead.appointment_notes ?? '')
+    setFollowUpStatus(getFollowUpStatus(lead))
+    setFollowUpType(getFollowUpType(lead))
+    setFollowUpAtFields(formatAppointmentFields(lead.follow_up_at))
+    setFollowUpNotes(lead.follow_up_notes ?? '')
     setCopyMessage('')
   }, [lead])
 
@@ -2106,6 +2219,173 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="Follow-Up">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Follow-up status
+                  </span>
+                  <select
+                    value={followUpStatus}
+                    onChange={(event) => setFollowUpStatus(event.target.value)}
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {followUpStatusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Follow-up type
+                  </span>
+                  <select
+                    value={followUpType}
+                    onChange={(event) => setFollowUpType(event.target.value)}
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {followUpTypeOptions.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Follow-up date
+                  </span>
+                  <input
+                    type="date"
+                    value={followUpAtFields.date}
+                    onChange={(event) =>
+                      setFollowUpAtFields((currentFields) => ({
+                        ...currentFields,
+                        date: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Hour
+                  </span>
+                  <select
+                    value={followUpAtFields.hour}
+                    onChange={(event) =>
+                      setFollowUpAtFields((currentFields) => ({
+                        ...currentFields,
+                        hour: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {appointmentHourOptions.map((hour) => (
+                      <option key={hour} value={hour}>
+                        {hour}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Minute
+                  </span>
+                  <select
+                    value={followUpAtFields.minute}
+                    onChange={(event) =>
+                      setFollowUpAtFields((currentFields) => ({
+                        ...currentFields,
+                        minute: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {appointmentMinuteOptions.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    AM/PM
+                  </span>
+                  <select
+                    value={followUpAtFields.period}
+                    onChange={(event) =>
+                      setFollowUpAtFields((currentFields) => ({
+                        ...currentFields,
+                        period: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {appointmentPeriodOptions.map((period) => (
+                      <option key={period} value={period}>
+                        {period}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                  Follow-up notes
+                </span>
+                <textarea
+                  value={followUpNotes}
+                  onChange={(event) => setFollowUpNotes(event.target.value)}
+                  placeholder="Add follow-up task context"
+                  className="min-h-32 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                />
+              </label>
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingFollowUp}
+                  onClick={() =>
+                    onSaveFollowUp(lead, {
+                      followUpStatus,
+                      followUpType,
+                      followUpAtDate: followUpAtFields.date,
+                      followUpAtHour: followUpAtFields.hour,
+                      followUpAtMinute: followUpAtFields.minute,
+                      followUpAtPeriod: followUpAtFields.period,
+                      followUpNotes,
+                    })
+                  }
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingFollowUp ? 'Saving...' : 'Save follow-up'}
+                </button>
+                {followUpMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      followUpMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {followUpMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="Pipeline">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
@@ -2120,6 +2400,14 @@ function LeadDetailModal({
                 <DetailField
                   label="Booked at"
                   value={formatTorontoDate(lead.booked_at)}
+                />
+                <DetailField
+                  label="Follow-up status"
+                  value={getFollowUpStatus(lead)}
+                />
+                <DetailField
+                  label="Next follow-up"
+                  value={formatTorontoDate(lead.follow_up_at)}
                 />
                 <DetailField
                   label="Created at"
@@ -2306,6 +2594,25 @@ function buildLeadActivityItems(lead: Lead) {
     time: lead.booked_at ? formatTorontoDate(lead.booked_at) : 'Now',
   })
 
+  if (lead.follow_up_at) {
+    activityItems.push({
+      label: `Follow-up scheduled: ${getFollowUpType(lead)}`,
+      time: formatTorontoDate(lead.follow_up_at),
+    })
+  }
+
+  activityItems.push({
+    label: `Follow-up status: ${getFollowUpStatus(lead)}`,
+    time: lead.follow_up_at ? formatTorontoDate(lead.follow_up_at) : 'Now',
+  })
+
+  if (getFollowUpStatus(lead) === 'Completed') {
+    activityItems.push({
+      label: 'Follow-up completed',
+      time: formatTorontoDate(lead.updated_at ?? lead.follow_up_at),
+    })
+  }
+
   if (typeof lead.notes === 'string' && lead.notes.trim().length > 0) {
     activityItems.push({
       label: 'Internal note added',
@@ -2328,11 +2635,37 @@ function TemperatureBadge({ temperature }: { temperature: string }) {
   return <Badge tone="gray">{temperature || 'COLD'}</Badge>
 }
 
+function FollowUpBadge({ lead }: { lead: Lead }) {
+  const status = getFollowUpStatus(lead)
+
+  if (status === 'Not set') {
+    return <span className="text-sm font-medium text-slate-400">-</span>
+  }
+
+  if (status === 'Completed') {
+    return <Badge tone="green">Completed</Badge>
+  }
+
+  if (isFollowUpOverdue(lead)) {
+    return <Badge tone="red">Overdue</Badge>
+  }
+
+  if (isFollowUpDueToday(lead)) {
+    return <Badge tone="yellow">Due today</Badge>
+  }
+
+  if (status === 'Pending') {
+    return <Badge tone="blue">Pending</Badge>
+  }
+
+  return <Badge tone="gray">{status}</Badge>
+}
+
 function Badge({
   tone,
   children,
 }: {
-  tone: 'red' | 'yellow' | 'gray' | 'blue'
+  tone: 'red' | 'yellow' | 'gray' | 'blue' | 'green'
   children: string
 }) {
   const classes = {
@@ -2340,6 +2673,7 @@ function Badge({
     yellow: 'border-yellow-200 bg-yellow-50 text-yellow-800',
     gray: 'border-slate-200 bg-slate-100 text-slate-700',
     blue: 'border-blue-200 bg-blue-50 text-blue-700',
+    green: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   }
 
   return (
@@ -2402,6 +2736,9 @@ function buildDashboardAnalytics(
       getLeadStatus(lead) === 'Booked' || getAppointmentStatus(lead) === 'Booked',
   ).length
   const closed = statusCounts.Closed
+  const followUpsDueToday = leads.filter(isFollowUpDueToday).length
+  const overdueFollowUps = leads.filter(isFollowUpOverdue).length
+  const upcomingFollowUps = leads.filter(isFollowUpUpcoming).length
 
   return {
     kpiCards: [
@@ -2411,6 +2748,9 @@ function buildDashboardAnalytics(
       { label: 'Booked Leads', value: booked },
       { label: 'Closed Leads', value: closed },
       { label: 'Lost Leads', value: statusCounts.Lost },
+      { label: 'Follow-ups Due Today', value: followUpsDueToday },
+      { label: 'Overdue Follow-ups', value: overdueFollowUps },
+      { label: 'Upcoming Follow-ups', value: upcomingFollowUps },
     ],
     qualificationRate: calculatePercentage(qualified, total),
     bookingRate: calculatePercentage(booked, total),
@@ -2510,7 +2850,7 @@ function buildLeadsOverTimeData(
   return Array.from({ length: dayCount }, (_item, index) => {
     const currentDate = new Date(startDate)
     currentDate.setDate(startDate.getDate() + index)
-    const dateKey = getLocalDateKey(currentDate)
+    const dateKey = getTorontoDateKey(currentDate)
 
     return {
       label: formatChartDateLabel(dateKey),
@@ -2527,14 +2867,6 @@ function calculatePercentage(numerator: number, denominator: number) {
   return Math.round((numerator / denominator) * 100)
 }
 
-function getLocalDateKey(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
 function getDateKey(value: unknown) {
   const date = parseSupabaseTimestamp(value)
 
@@ -2542,7 +2874,55 @@ function getDateKey(value: unknown) {
     return null
   }
 
-  return getLocalDateKey(date)
+  return getTorontoDateKey(date)
+}
+
+function getTorontoDateKey(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const valueByType = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  )
+
+  return `${valueByType.year}-${valueByType.month}-${valueByType.day}`
+}
+
+function isPendingFollowUp(lead: Lead) {
+  return getFollowUpStatus(lead) === 'Pending'
+}
+
+function isFollowUpDueToday(lead: Lead) {
+  const followUpDate = parseSupabaseTimestamp(lead.follow_up_at)
+
+  return (
+    isPendingFollowUp(lead) &&
+    followUpDate !== null &&
+    getTorontoDateKey(followUpDate) === getTorontoDateKey(new Date())
+  )
+}
+
+function isFollowUpOverdue(lead: Lead) {
+  const followUpDate = parseSupabaseTimestamp(lead.follow_up_at)
+
+  return (
+    isPendingFollowUp(lead) &&
+    followUpDate !== null &&
+    followUpDate.getTime() < Date.now()
+  )
+}
+
+function isFollowUpUpcoming(lead: Lead) {
+  const followUpDate = parseSupabaseTimestamp(lead.follow_up_at)
+
+  return (
+    isPendingFollowUp(lead) &&
+    followUpDate !== null &&
+    followUpDate.getTime() > Date.now()
+  )
 }
 
 function formatChartDateLabel(dateKey: string) {
@@ -2594,6 +2974,32 @@ function getValidAppointmentStatus(status: string) {
   )
     ? status
     : 'Not booked'
+}
+
+function getFollowUpStatus(lead: Lead) {
+  return getValidFollowUpStatus(
+    typeof lead.follow_up_status === 'string' ? lead.follow_up_status : '',
+  )
+}
+
+function getValidFollowUpStatus(status: string) {
+  return followUpStatusOptions.includes(
+    status as (typeof followUpStatusOptions)[number],
+  )
+    ? status
+    : 'Not set'
+}
+
+function getFollowUpType(lead: Lead) {
+  return getValidFollowUpType(
+    typeof lead.follow_up_type === 'string' ? lead.follow_up_type : '',
+  )
+}
+
+function getValidFollowUpType(type: string) {
+  return followUpTypeOptions.includes(type as (typeof followUpTypeOptions)[number])
+    ? type
+    : 'Call'
 }
 
 function getLeadTemperature(lead: Lead) {
@@ -2659,30 +3065,49 @@ function parseAppointmentFieldsInput({
   bookedAtMinute: string
   bookedAtPeriod: string
 }) {
-  if (!bookedAtDate) {
+  return parseTorontoDateTimeFields({
+    date: bookedAtDate,
+    hour: bookedAtHour,
+    minute: bookedAtMinute,
+    period: bookedAtPeriod,
+  })
+}
+
+function parseTorontoDateTimeFields({
+  date: dateValue,
+  hour: hourValue,
+  minute: minuteValue,
+  period: periodValue,
+}: {
+  date: string
+  hour: string
+  minute: string
+  period: string
+}) {
+  if (!dateValue) {
     return null
   }
 
-  const match = bookedAtDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const match = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})$/)
 
   if (!match) {
     return null
   }
 
   const hour = appointmentHourOptions.includes(
-    bookedAtHour as (typeof appointmentHourOptions)[number],
+    hourValue as (typeof appointmentHourOptions)[number],
   )
-    ? Number(bookedAtHour)
+    ? Number(hourValue)
     : 9
   const minute = appointmentMinuteOptions.includes(
-    bookedAtMinute as (typeof appointmentMinuteOptions)[number],
+    minuteValue as (typeof appointmentMinuteOptions)[number],
   )
-    ? Number(bookedAtMinute)
+    ? Number(minuteValue)
     : 0
   const period = appointmentPeriodOptions.includes(
-    bookedAtPeriod as (typeof appointmentPeriodOptions)[number],
+    periodValue as (typeof appointmentPeriodOptions)[number],
   )
-    ? bookedAtPeriod
+    ? periodValue
     : 'AM'
   const hour24 =
     period === 'AM' ? (hour === 12 ? 0 : hour) : hour === 12 ? 12 : hour + 12
