@@ -3749,12 +3749,19 @@ function buildSequenceWebhookPayload(lead: Lead) {
     phone: lead.phone ?? null,
     business_name: lead.business_name ?? null,
     service_type: lead.service_type ?? null,
+    lead_source: lead.lead_source ?? null,
+    response_speed: lead.response_speed ?? null,
+    calendly_url: lead.calendly_url ?? null,
+    booking_link: lead.calendly_url ?? null,
     lead_score: getLeadScore(lead),
     lead_temperature: getLeadTemperature(lead),
     ai_summary: lead.ai_summary ?? null,
     ai_recommendation: lead.ai_recommendation ?? null,
     next_sequence_step: getNextSequenceStep(lead),
     follow_up_sequence_status: getFollowUpSequenceStatus(lead),
+    follow_up_notes: lead.follow_up_notes ?? null,
+    appointment_status: getAppointmentStatus(lead),
+    status: getLeadStatus(lead),
   }
 }
 
