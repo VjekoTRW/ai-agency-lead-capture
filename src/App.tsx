@@ -52,6 +52,8 @@ type Lead = {
   created_at?: string | null
   updated_at?: string | null
   lead_temperature?: string | null
+  lead_score?: number | null
+  lead_score_reason?: string | null
   status?: string | null
   notes?: string | null
   booked_at?: string | null
@@ -114,6 +116,8 @@ const appointmentMinuteOptions = ['00', '15', '30', '45'] as const
 const appointmentPeriodOptions = ['AM', 'PM'] as const
 
 const temperatureOptions = ['HOT', 'WARM', 'COLD'] as const
+
+const scoreRangeOptions = ['All', '75+', '45-74', 'Under 45'] as const
 
 const timeRangeOptions = [
   'Today',
@@ -1063,6 +1067,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [temperatureFilter, setTemperatureFilter] = useState('All')
+  const [scoreRangeFilter, setScoreRangeFilter] = useState('All')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [updatingLeadKey, setUpdatingLeadKey] = useState<string | null>(null)
@@ -1091,7 +1096,10 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       setError(leadsError.message)
       setLeads([])
     } else {
-      setLeads((data ?? []) as Lead[])
+      const fetchedLeads = (data ?? []) as Lead[]
+      const scoredLeads = fetchedLeads.map(applyLeadScore)
+      setLeads(scoredLeads)
+      syncLeadScores(fetchedLeads)
     }
 
     setLoading(false)
@@ -1130,20 +1138,42 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       const matchesTemperature =
         temperatureFilter === 'All' ||
         getLeadTemperature(lead) === temperatureFilter
+      const matchesScoreRange =
+        scoreRangeFilter === 'All' ||
+        isLeadInScoreRange(lead, scoreRangeFilter)
 
-      return matchesSearch && matchesStatus && matchesTemperature
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesTemperature &&
+        matchesScoreRange
+      )
     })
-  }, [timeFilteredLeads, searchTerm, statusFilter, temperatureFilter])
+  }, [
+    timeFilteredLeads,
+    searchTerm,
+    statusFilter,
+    temperatureFilter,
+    scoreRangeFilter,
+  ])
 
   const handleStatusChange = async (lead: Lead, nextStatus: string) => {
     const leadKey = getLeadKey(lead)
     const updatedAt = new Date().toISOString()
+    const nextLead = applyLeadScore({
+      ...lead,
+      status: nextStatus,
+      updated_at: updatedAt,
+    })
+    const statusPayload = {
+      status: nextStatus,
+      updated_at: updatedAt,
+      ...getLeadScorePayload(nextLead),
+    }
     setUpdatingLeadKey(leadKey)
     setError('')
 
-    const query = supabase
-      .from('leads')
-      .update({ status: nextStatus, updated_at: updatedAt })
+    const query = supabase.from('leads').update(statusPayload)
     const { error: updateError } =
       lead.id !== undefined && lead.id !== null
         ? await query.eq('id', lead.id)
@@ -1155,13 +1185,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       setLeads((currentLeads) =>
         currentLeads.map((currentLead) =>
           getLeadKey(currentLead) === leadKey
-            ? { ...currentLead, status: nextStatus, updated_at: updatedAt }
+            ? { ...currentLead, ...statusPayload }
             : currentLead,
         ),
       )
       setSelectedLead((currentLead) =>
         currentLead && getLeadKey(currentLead) === leadKey
-          ? { ...currentLead, status: nextStatus, updated_at: updatedAt }
+          ? { ...currentLead, ...statusPayload }
           : currentLead,
       )
     }
@@ -1172,12 +1202,16 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const handleSaveNote = async (lead: Lead, notes: string) => {
     const leadKey = getLeadKey(lead)
     const updatedAt = new Date().toISOString()
+    const nextLead = applyLeadScore({ ...lead, notes, updated_at: updatedAt })
+    const notePayload = {
+      notes,
+      updated_at: updatedAt,
+      ...getLeadScorePayload(nextLead),
+    }
     setSavingNoteLeadKey(leadKey)
     setNoteMessage('')
 
-    const query = supabase
-      .from('leads')
-      .update({ notes, updated_at: updatedAt })
+    const query = supabase.from('leads').update(notePayload)
     const { error: noteError } =
       lead.id !== undefined && lead.id !== null
         ? await query.eq('id', lead.id)
@@ -1189,13 +1223,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       setLeads((currentLeads) =>
         currentLeads.map((currentLead) =>
           getLeadKey(currentLead) === leadKey
-            ? { ...currentLead, notes, updated_at: updatedAt }
+            ? { ...currentLead, ...notePayload }
             : currentLead,
         ),
       )
       setSelectedLead((currentLead) =>
         currentLead && getLeadKey(currentLead) === leadKey
-          ? { ...currentLead, notes, updated_at: updatedAt }
+          ? { ...currentLead, ...notePayload }
           : currentLead,
       )
       setNoteMessage('Note saved.')
@@ -1221,12 +1255,17 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       appointment.appointmentStatus,
     )
     const nextBookedAt = parseAppointmentFieldsInput(appointment)
-    const appointmentPayload = {
+    const appointmentPayloadBase = {
       appointment_status: nextAppointmentStatus,
       booked_at: nextBookedAt,
       appointment_notes: appointment.appointmentNotes,
       updated_at: updatedAt,
       ...(nextAppointmentStatus === 'Booked' ? { status: 'Booked' } : {}),
+    }
+    const nextLead = applyLeadScore({ ...lead, ...appointmentPayloadBase })
+    const appointmentPayload = {
+      ...appointmentPayloadBase,
+      ...getLeadScorePayload(nextLead),
     }
 
     setSavingAppointmentLeadKey(leadKey)
@@ -1273,7 +1312,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   ) => {
     const leadKey = getLeadKey(lead)
     const updatedAt = new Date().toISOString()
-    const followUpPayload = {
+    const followUpPayloadBase = {
       follow_up_status: getValidFollowUpStatus(followUp.followUpStatus),
       follow_up_type: getValidFollowUpType(followUp.followUpType),
       follow_up_at: parseTorontoDateTimeFields({
@@ -1284,6 +1323,11 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       }),
       follow_up_notes: followUp.followUpNotes,
       updated_at: updatedAt,
+    }
+    const nextLead = applyLeadScore({ ...lead, ...followUpPayloadBase })
+    const followUpPayload = {
+      ...followUpPayloadBase,
+      ...getLeadScorePayload(nextLead),
     }
 
     setSavingFollowUpLeadKey(leadKey)
@@ -1547,7 +1591,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
               </ChartCard>
             </div>
 
-            <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr_180px_180px]">
+            <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr_180px_180px_180px]">
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Search
@@ -1574,6 +1618,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                 onChange={setTemperatureFilter}
                 options={['All', ...temperatureOptions]}
               />
+
+              <FilterSelect
+                label="Score range"
+                value={scoreRangeFilter}
+                onChange={setScoreRangeFilter}
+                options={scoreRangeOptions}
+              />
             </div>
 
             {error ? (
@@ -1593,7 +1644,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-[1540px] w-full text-left text-sm">
+                  <table className="min-w-[1640px] w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
                       <tr>
                         <th className="px-4 py-3">Name</th>
@@ -1605,6 +1656,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                         <th className="px-4 py-3">Response Speed</th>
                         <th className="px-4 py-3">submission_count</th>
                         <th className="px-4 py-3">created_at</th>
+                        <th className="px-4 py-3">Lead Score</th>
                         <th className="px-4 py-3">lead_temperature</th>
                         <th className="px-4 py-3">appointment_status</th>
                         <th className="px-4 py-3">Follow-Up Status</th>
@@ -1657,6 +1709,9 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                           </td>
                           <td className="px-4 py-3 text-slate-600">
                             {formatTorontoDate(lead.created_at)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <LeadScoreBadge lead={lead} />
                           </td>
                           <td className="px-4 py-3">
                             <TemperatureBadge
@@ -2394,8 +2449,16 @@ function LeadDetailModal({
                   value={getAppointmentStatus(lead)}
                 />
                 <DetailField
+                  label="Lead score"
+                  value={getLeadScore(lead)}
+                />
+                <DetailField
                   label="Lead temperature"
                   value={getLeadTemperature(lead)}
+                />
+                <DetailField
+                  label="Score reason"
+                  value={getLeadScoreReason(lead)}
                 />
                 <DetailField
                   label="Booked at"
@@ -2651,6 +2714,21 @@ function TemperatureBadge({ temperature }: { temperature: string }) {
   return <Badge tone="gray">{temperature || 'COLD'}</Badge>
 }
 
+function LeadScoreBadge({ lead }: { lead: Lead }) {
+  const score = getLeadScore(lead)
+  const temperature = getLeadTemperature(lead)
+
+  if (temperature === 'HOT') {
+    return <Badge tone="red">{String(score)}</Badge>
+  }
+
+  if (temperature === 'WARM') {
+    return <Badge tone="yellow">{String(score)}</Badge>
+  }
+
+  return <Badge tone="gray">{String(score)}</Badge>
+}
+
 function FollowUpBadge({ lead }: { lead: Lead }) {
   const label = getFollowUpDisplayLabel(lead)
 
@@ -2755,10 +2833,19 @@ function buildDashboardAnalytics(
   const followUpsDueToday = leads.filter(isFollowUpDueToday).length
   const overdueFollowUps = leads.filter(isFollowUpOverdue).length
   const upcomingFollowUps = leads.filter(isFollowUpUpcoming).length
+  const totalLeadScore = leads.reduce(
+    (scoreTotal, lead) => scoreTotal + getLeadScore(lead),
+    0,
+  )
+  const averageLeadScore =
+    total > 0 ? Math.round(totalLeadScore / total) : 0
+  const highIntentLeads = leads.filter((lead) => getLeadScore(lead) >= 75).length
 
   return {
     kpiCards: [
       { label: 'Total Leads', value: total },
+      { label: 'Average Lead Score', value: averageLeadScore },
+      { label: 'High-Intent Leads', value: highIntentLeads },
       { label: 'New Leads', value: statusCounts.New },
       { label: 'Qualified Leads', value: qualified },
       { label: 'Booked Leads', value: booked },
@@ -3054,25 +3141,160 @@ function getValidFollowUpType(type: string) {
     : 'Call'
 }
 
-function getLeadTemperature(lead: Lead) {
-  const explicitTemperature =
-    typeof lead.lead_temperature === 'string'
-      ? lead.lead_temperature.toUpperCase()
-      : ''
+function calculateLeadScore(lead: Lead) {
+  let score = 20
+  const reasons = ['Base score +20']
+  const addScore = (points: number, reason: string) => {
+    score += points
+    reasons.push(`${reason} ${points > 0 ? '+' : ''}${points}`)
+  }
 
-  if (temperatureOptions.includes(explicitTemperature as 'HOT' | 'WARM' | 'COLD')) {
-    return explicitTemperature
+  const serviceType =
+    typeof lead.service_type === 'string'
+      ? lead.service_type.trim().toLowerCase()
+      : ''
+  if (serviceType.includes('hvac')) {
+    addScore(10, 'HVAC service')
+  } else if (serviceType.includes('plumbing')) {
+    addScore(10, 'Plumbing service')
+  } else if (serviceType.includes('electrical')) {
+    addScore(8, 'Electrical service')
+  }
+
+  if (lead.lead_source === 'Mostly phone calls') {
+    addScore(10, 'Phone call lead source')
+  } else if (lead.lead_source === 'Mostly website forms') {
+    addScore(15, 'Website form lead source')
+  } else if (lead.lead_source === 'Both calls and forms') {
+    addScore(20, 'Calls and forms lead source')
   }
 
   if (lead.response_speed === 'Frequently') {
-    return 'HOT'
+    addScore(25, 'Frequent response speed')
+  } else if (lead.response_speed === 'Sometimes') {
+    addScore(12, 'Occasional response speed')
   }
 
-  if (lead.response_speed === 'Sometimes') {
-    return 'WARM'
+  const submissionCount = lead.submission_count ?? 0
+  if (submissionCount >= 3) {
+    addScore(25, 'Three or more submissions')
+  } else if (submissionCount >= 2) {
+    addScore(15, 'Repeat submission')
   }
 
-  return 'COLD'
+  const status = getLeadStatus(lead)
+  if (status === 'Contacted') {
+    addScore(5, 'Contacted CRM status')
+  } else if (status === 'Qualified') {
+    addScore(20, 'Qualified CRM status')
+  } else if (status === 'Booked') {
+    addScore(35, 'Booked CRM status')
+  } else if (status === 'Closed') {
+    addScore(50, 'Closed CRM status')
+  } else if (status === 'Lost') {
+    addScore(-30, 'Lost CRM status')
+  }
+
+  const appointmentStatus = getAppointmentStatus(lead)
+  if (appointmentStatus === 'Booked') {
+    addScore(35, 'Booked appointment')
+  } else if (appointmentStatus === 'Completed') {
+    addScore(45, 'Completed appointment')
+  } else if (appointmentStatus === 'Cancelled') {
+    addScore(-10, 'Cancelled appointment')
+  } else if (appointmentStatus === 'No-show') {
+    addScore(-15, 'Appointment no-show')
+  }
+
+  const followUpStatus = getFollowUpStatus(lead)
+  if (followUpStatus === 'Completed') {
+    addScore(10, 'Completed follow-up')
+  } else if (isFollowUpOverdue(lead)) {
+    addScore(-10, 'Overdue follow-up')
+  } else if (followUpStatus === 'Pending') {
+    addScore(5, 'Pending follow-up')
+  }
+
+  const clampedScore = Math.min(100, Math.max(0, score))
+  const temperature =
+    clampedScore >= 75 ? 'HOT' : clampedScore >= 45 ? 'WARM' : 'COLD'
+
+  return {
+    score: clampedScore,
+    temperature,
+    reason: reasons.join('; '),
+  }
+}
+
+function getLeadScorePayload(lead: Lead) {
+  const { score, temperature, reason } = calculateLeadScore(lead)
+
+  return {
+    lead_score: score,
+    lead_temperature: temperature,
+    lead_score_reason: reason,
+  }
+}
+
+function applyLeadScore(lead: Lead) {
+  return {
+    ...lead,
+    ...getLeadScorePayload(lead),
+  }
+}
+
+function getLeadScore(lead: Lead) {
+  return calculateLeadScore(lead).score
+}
+
+function getLeadScoreReason(lead: Lead) {
+  return calculateLeadScore(lead).reason
+}
+
+function isLeadInScoreRange(lead: Lead, scoreRange: string) {
+  const score = getLeadScore(lead)
+
+  if (scoreRange === '75+') {
+    return score >= 75
+  }
+
+  if (scoreRange === '45-74') {
+    return score >= 45 && score < 75
+  }
+
+  if (scoreRange === 'Under 45') {
+    return score < 45
+  }
+
+  return true
+}
+
+function syncLeadScores(leads: Lead[]) {
+  void Promise.allSettled(
+    leads.map(async (lead) => {
+      const scorePayload = getLeadScorePayload(lead)
+      const hasCurrentScore =
+        lead.lead_score === scorePayload.lead_score &&
+        lead.lead_temperature === scorePayload.lead_temperature &&
+        lead.lead_score_reason === scorePayload.lead_score_reason
+
+      if (hasCurrentScore) {
+        return
+      }
+
+      const query = supabase.from('leads').update(scorePayload)
+
+      if (lead.id !== undefined && lead.id !== null) {
+        await query.eq('id', lead.id)
+      } else if (lead.email) {
+        await query.eq('email', lead.email)
+      }
+    }),
+  )
+}
+
+function getLeadTemperature(lead: Lead) {
+  return calculateLeadScore(lead).temperature
 }
 
 function displayValue(value: unknown) {
