@@ -54,6 +54,9 @@ type Lead = {
   lead_temperature?: string | null
   lead_score?: number | null
   lead_score_reason?: string | null
+  ai_summary?: string | null
+  ai_recommendation?: string | null
+  ai_summary_updated_at?: string | null
   status?: string | null
   notes?: string | null
   booked_at?: string | null
@@ -1079,9 +1082,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [savingFollowUpLeadKey, setSavingFollowUpLeadKey] = useState<
     string | null
   >(null)
+  const [savingAiSummaryLeadKey, setSavingAiSummaryLeadKey] = useState<
+    string | null
+  >(null)
   const [noteMessage, setNoteMessage] = useState('')
   const [appointmentMessage, setAppointmentMessage] = useState('')
   const [followUpMessage, setFollowUpMessage] = useState('')
+  const [aiSummaryMessage, setAiSummaryMessage] = useState('')
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -1358,6 +1365,47 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     }
 
     setSavingFollowUpLeadKey(null)
+  }
+
+  const handleGenerateAiSummary = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+    const aiQualification = generateAiQualificationPlaceholder(lead)
+    const aiPayload = {
+      ai_summary: aiQualification.summary,
+      ai_recommendation: aiQualification.recommendation,
+      ai_summary_updated_at: updatedAt,
+      updated_at: updatedAt,
+    }
+
+    setSavingAiSummaryLeadKey(leadKey)
+    setAiSummaryMessage('')
+
+    const query = supabase.from('leads').update(aiPayload)
+    const { error: aiSummaryError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (aiSummaryError) {
+      setAiSummaryMessage(`Error: ${aiSummaryError.message}`)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, ...aiPayload }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, ...aiPayload }
+          : currentLead,
+      )
+      setAiSummaryMessage('AI qualification saved.')
+    }
+
+    setSavingAiSummaryLeadKey(null)
   }
 
   const handleSignOut = async () => {
@@ -1673,6 +1721,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             setNoteMessage('')
                             setAppointmentMessage('')
                             setFollowUpMessage('')
+                            setAiSummaryMessage('')
                           }}
                           className="cursor-pointer align-top transition hover:bg-slate-50"
                         >
@@ -1765,12 +1814,17 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
             savingAppointmentLeadKey === getLeadKey(selectedLead)
           }
           isSavingFollowUp={savingFollowUpLeadKey === getLeadKey(selectedLead)}
+          isSavingAiSummary={
+            savingAiSummaryLeadKey === getLeadKey(selectedLead)
+          }
           noteMessage={noteMessage}
           appointmentMessage={appointmentMessage}
           followUpMessage={followUpMessage}
+          aiSummaryMessage={aiSummaryMessage}
           onSaveNote={handleSaveNote}
           onSaveAppointment={handleSaveAppointment}
           onSaveFollowUp={handleSaveFollowUp}
+          onGenerateAiSummary={handleGenerateAiSummary}
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
@@ -1918,21 +1972,26 @@ function LeadDetailModal({
   isSavingNote,
   isSavingAppointment,
   isSavingFollowUp,
+  isSavingAiSummary,
   noteMessage,
   appointmentMessage,
   followUpMessage,
+  aiSummaryMessage,
   onSaveNote,
   onSaveAppointment,
   onSaveFollowUp,
+  onGenerateAiSummary,
   onClose,
 }: {
   lead: Lead
   isSavingNote: boolean
   isSavingAppointment: boolean
   isSavingFollowUp: boolean
+  isSavingAiSummary: boolean
   noteMessage: string
   appointmentMessage: string
   followUpMessage: string
+  aiSummaryMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
   onSaveAppointment: (
     lead: Lead,
@@ -1957,6 +2016,7 @@ function LeadDetailModal({
       followUpNotes: string
     },
   ) => Promise<void>
+  onGenerateAiSummary: (lead: Lead) => Promise<void>
   onClose: () => void
 }) {
   const [notes, setNotes] = useState(lead.notes ?? '')
@@ -2441,6 +2501,48 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="AI Qualification">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailField label="Lead score" value={getLeadScore(lead)} />
+                <DetailField
+                  label="Lead temperature"
+                  value={getLeadTemperature(lead)}
+                />
+              </div>
+
+              <DetailField label="AI Summary" value={lead.ai_summary} />
+              <DetailField
+                label="AI Recommendation"
+                value={lead.ai_recommendation}
+              />
+              <DetailField
+                label="Last AI Updated"
+                value={formatTorontoDate(lead.ai_summary_updated_at)}
+              />
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingAiSummary}
+                  onClick={() => onGenerateAiSummary(lead)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingAiSummary ? 'Generating...' : 'Generate AI Summary'}
+                </button>
+                {aiSummaryMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      aiSummaryMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {aiSummaryMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="Pipeline">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
@@ -2689,6 +2791,13 @@ function buildLeadActivityItems(lead: Lead) {
     activityItems.push({
       label: 'Follow-up completed',
       time: formatTorontoDate(lead.updated_at ?? lead.follow_up_at),
+    })
+  }
+
+  if (lead.ai_summary_updated_at) {
+    activityItems.push({
+      label: 'AI qualification generated',
+      time: formatTorontoDate(lead.ai_summary_updated_at),
     })
   }
 
@@ -3267,6 +3376,50 @@ function isLeadInScoreRange(lead: Lead, scoreRange: string) {
   }
 
   return true
+}
+
+function generateAiQualificationPlaceholder(lead: Lead) {
+  const temperature = getLeadTemperature(lead)
+  const serviceType = getReadableLeadField(lead.service_type, 'service')
+  const leadSource = getReadableLeadField(lead.lead_source, 'unknown sources')
+  const responseSpeed = getReadableLeadField(
+    lead.response_speed,
+    'an unknown cadence',
+  )
+  const recommendationByTemperature = {
+    HOT: 'Prioritize immediate follow-up and push toward booking.',
+    WARM: 'Follow up within 24 hours and qualify pain points.',
+    COLD: 'Nurture lightly and revisit if they engage again.',
+  }
+  const summary = `This lead appears to be a ${temperature} ${serviceType} prospect. They report leads coming from ${leadSource.toLowerCase()} and respond ${responseSpeed}, suggesting ${getAutomationFitDescription(
+    temperature,
+  )} for automation.`
+
+  return {
+    summary,
+    recommendation:
+      recommendationByTemperature[
+        temperature as keyof typeof recommendationByTemperature
+      ],
+  }
+}
+
+function getReadableLeadField(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : fallback
+}
+
+function getAutomationFitDescription(temperature: string) {
+  if (temperature === 'HOT') {
+    return 'a strong fit'
+  }
+
+  if (temperature === 'WARM') {
+    return 'a moderate fit'
+  }
+
+  return 'a lighter fit'
 }
 
 function syncLeadScores(leads: Lead[]) {
