@@ -1955,6 +1955,7 @@ function LeadDetailModal({
                   </span>
                   <input
                     type="datetime-local"
+                    step="900"
                     value={bookedAt}
                     onChange={(event) => setBookedAt(event.target.value)}
                     className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
@@ -2559,12 +2560,14 @@ function parseDateTimeLocalInput(value: string) {
   }
 
   const [, year, month, day, hour, minute] = match
-  const wallTimeAsUtc = Date.UTC(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    Number(hour),
-    Number(minute),
+  const wallTimeAsUtc = roundToNearestQuarterHour(
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+    ),
   )
   const offset = getTimeZoneOffsetMs(
     'America/Toronto',
@@ -2577,6 +2580,12 @@ function parseDateTimeLocalInput(value: string) {
   }
 
   return date.toISOString()
+}
+
+function roundToNearestQuarterHour(timestamp: number) {
+  const quarterHourMs = 15 * 60 * 1000
+
+  return Math.round(timestamp / quarterHourMs) * quarterHourMs
 }
 
 function formatDateTimeLocal(timestamp: unknown) {
