@@ -81,6 +81,25 @@ const appointmentStatusOptions = [
   'No-show',
 ] as const
 
+const appointmentHourOptions = [
+  '01',
+  '02',
+  '03',
+  '04',
+  '05',
+  '06',
+  '07',
+  '08',
+  '09',
+  '10',
+  '11',
+  '12',
+] as const
+
+const appointmentMinuteOptions = ['00', '15', '30', '45'] as const
+
+const appointmentPeriodOptions = ['AM', 'PM'] as const
+
 const temperatureOptions = ['HOT', 'WARM', 'COLD'] as const
 
 const timeRangeOptions = [
@@ -1172,7 +1191,10 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     lead: Lead,
     appointment: {
       appointmentStatus: string
-      bookedAt: string
+      bookedAtDate: string
+      bookedAtHour: string
+      bookedAtMinute: string
+      bookedAtPeriod: string
       appointmentNotes: string
     },
   ) => {
@@ -1181,7 +1203,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     const nextAppointmentStatus = getValidAppointmentStatus(
       appointment.appointmentStatus,
     )
-    const nextBookedAt = parseDateTimeLocalInput(appointment.bookedAt)
+    const nextBookedAt = parseAppointmentFieldsInput(appointment)
     const appointmentPayload = {
       appointment_status: nextAppointmentStatus,
       booked_at: nextBookedAt,
@@ -1770,7 +1792,10 @@ function LeadDetailModal({
     lead: Lead,
     appointment: {
       appointmentStatus: string
-      bookedAt: string
+      bookedAtDate: string
+      bookedAtHour: string
+      bookedAtMinute: string
+      bookedAtPeriod: string
       appointmentNotes: string
     },
   ) => Promise<void>
@@ -1780,7 +1805,9 @@ function LeadDetailModal({
   const [appointmentStatus, setAppointmentStatus] = useState(
     getAppointmentStatus(lead),
   )
-  const [bookedAt, setBookedAt] = useState(formatDateTimeLocal(lead.booked_at))
+  const [bookedAtFields, setBookedAtFields] = useState(() =>
+    formatAppointmentFields(lead.booked_at),
+  )
   const [appointmentNotes, setAppointmentNotes] = useState(
     lead.appointment_notes ?? '',
   )
@@ -1796,7 +1823,7 @@ function LeadDetailModal({
   useEffect(() => {
     setNotes(lead.notes ?? '')
     setAppointmentStatus(getAppointmentStatus(lead))
-    setBookedAt(formatDateTimeLocal(lead.booked_at))
+    setBookedAtFields(formatAppointmentFields(lead.booked_at))
     setAppointmentNotes(lead.appointment_notes ?? '')
     setCopyMessage('')
   }, [lead])
@@ -1951,15 +1978,87 @@ function LeadDetailModal({
 
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Booked at
+                    Appointment date
                   </span>
                   <input
-                    type="datetime-local"
-                    step="900"
-                    value={bookedAt}
-                    onChange={(event) => setBookedAt(event.target.value)}
+                    type="date"
+                    value={bookedAtFields.date}
+                    onChange={(event) =>
+                      setBookedAtFields((currentFields) => ({
+                        ...currentFields,
+                        date: event.target.value,
+                      }))
+                    }
                     className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
                   />
+                </label>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Hour
+                  </span>
+                  <select
+                    value={bookedAtFields.hour}
+                    onChange={(event) =>
+                      setBookedAtFields((currentFields) => ({
+                        ...currentFields,
+                        hour: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {appointmentHourOptions.map((hour) => (
+                      <option key={hour} value={hour}>
+                        {hour}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Minute
+                  </span>
+                  <select
+                    value={bookedAtFields.minute}
+                    onChange={(event) =>
+                      setBookedAtFields((currentFields) => ({
+                        ...currentFields,
+                        minute: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {appointmentMinuteOptions.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    AM/PM
+                  </span>
+                  <select
+                    value={bookedAtFields.period}
+                    onChange={(event) =>
+                      setBookedAtFields((currentFields) => ({
+                        ...currentFields,
+                        period: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {appointmentPeriodOptions.map((period) => (
+                      <option key={period} value={period}>
+                        {period}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
 
@@ -1982,7 +2081,10 @@ function LeadDetailModal({
                   onClick={() =>
                     onSaveAppointment(lead, {
                       appointmentStatus,
-                      bookedAt,
+                      bookedAtDate: bookedAtFields.date,
+                      bookedAtHour: bookedAtFields.hour,
+                      bookedAtMinute: bookedAtFields.minute,
+                      bookedAtPeriod: bookedAtFields.period,
                       appointmentNotes,
                     })
                   }
@@ -2546,28 +2648,51 @@ function parseSupabaseTimestamp(timestamp: unknown) {
   return date
 }
 
-function parseDateTimeLocalInput(value: string) {
-  if (!value) {
+function parseAppointmentFieldsInput({
+  bookedAtDate,
+  bookedAtHour,
+  bookedAtMinute,
+  bookedAtPeriod,
+}: {
+  bookedAtDate: string
+  bookedAtHour: string
+  bookedAtMinute: string
+  bookedAtPeriod: string
+}) {
+  if (!bookedAtDate) {
     return null
   }
 
-  const match = value.match(
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/,
-  )
+  const match = bookedAtDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
 
   if (!match) {
     return null
   }
 
-  const [, year, month, day, hour, minute] = match
-  const wallTimeAsUtc = roundToNearestQuarterHour(
-    Date.UTC(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-    ),
+  const hour = appointmentHourOptions.includes(
+    bookedAtHour as (typeof appointmentHourOptions)[number],
+  )
+    ? Number(bookedAtHour)
+    : 9
+  const minute = appointmentMinuteOptions.includes(
+    bookedAtMinute as (typeof appointmentMinuteOptions)[number],
+  )
+    ? Number(bookedAtMinute)
+    : 0
+  const period = appointmentPeriodOptions.includes(
+    bookedAtPeriod as (typeof appointmentPeriodOptions)[number],
+  )
+    ? bookedAtPeriod
+    : 'AM'
+  const hour24 =
+    period === 'AM' ? (hour === 12 ? 0 : hour) : hour === 12 ? 12 : hour + 12
+  const [, year, month, day] = match
+  const wallTimeAsUtc = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    hour24,
+    minute,
   )
   const offset = getTimeZoneOffsetMs(
     'America/Toronto',
@@ -2582,17 +2707,16 @@ function parseDateTimeLocalInput(value: string) {
   return date.toISOString()
 }
 
-function roundToNearestQuarterHour(timestamp: number) {
-  const quarterHourMs = 15 * 60 * 1000
-
-  return Math.round(timestamp / quarterHourMs) * quarterHourMs
-}
-
-function formatDateTimeLocal(timestamp: unknown) {
+function formatAppointmentFields(timestamp: unknown) {
   const date = parseSupabaseTimestamp(timestamp)
 
   if (!date) {
-    return ''
+    return {
+      date: '',
+      hour: '09',
+      minute: '00',
+      period: 'AM',
+    }
   }
 
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -2607,8 +2731,19 @@ function formatDateTimeLocal(timestamp: unknown) {
   const valueByType = Object.fromEntries(
     parts.map((part) => [part.type, part.value]),
   )
+  const hour24 = Number(valueByType.hour)
+  const hour12 = hour24 % 12 || 12
 
-  return `${valueByType.year}-${valueByType.month}-${valueByType.day}T${valueByType.hour}:${valueByType.minute}`
+  return {
+    date: `${valueByType.year}-${valueByType.month}-${valueByType.day}`,
+    hour: String(hour12).padStart(2, '0'),
+    minute: appointmentMinuteOptions.includes(
+      valueByType.minute as (typeof appointmentMinuteOptions)[number],
+    )
+      ? valueByType.minute
+      : '00',
+    period: hour24 >= 12 ? 'PM' : 'AM',
+  }
 }
 
 function getTimeZoneOffsetMs(timeZone: string, date: Date) {
