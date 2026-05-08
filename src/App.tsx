@@ -2401,10 +2401,9 @@ function LeadDetailModal({
                   label="Booked at"
                   value={formatTorontoDate(lead.booked_at)}
                 />
-                <DetailField
-                  label="Follow-up status"
-                  value={getFollowUpStatus(lead)}
-                />
+                <DetailBadgeField label="Follow-up status">
+                  <FollowUpBadge lead={lead} />
+                </DetailBadgeField>
                 <DetailField
                   label="Next follow-up"
                   value={formatTorontoDate(lead.follow_up_at)}
@@ -2481,6 +2480,23 @@ function DetailField({ label, value }: { label: string; value: unknown }) {
       <div className="mt-1 min-w-0 overflow-hidden break-words text-sm font-medium text-slate-900">
         {renderUnknownValue(value)}
       </div>
+    </div>
+  )
+}
+
+function DetailBadgeField({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div className="min-w-0 overflow-hidden">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+        {label}
+      </p>
+      <div className="mt-1">{children}</div>
     </div>
   )
 }
@@ -2636,29 +2652,29 @@ function TemperatureBadge({ temperature }: { temperature: string }) {
 }
 
 function FollowUpBadge({ lead }: { lead: Lead }) {
-  const status = getFollowUpStatus(lead)
+  const label = getFollowUpDisplayLabel(lead)
 
-  if (status === 'Not set') {
+  if (label === '-') {
     return <span className="text-sm font-medium text-slate-400">-</span>
   }
 
-  if (status === 'Completed') {
+  if (label === 'Completed') {
     return <Badge tone="green">Completed</Badge>
   }
 
-  if (isFollowUpOverdue(lead)) {
+  if (label === 'Overdue') {
     return <Badge tone="red">Overdue</Badge>
   }
 
-  if (isFollowUpDueToday(lead)) {
-    return <Badge tone="yellow">Due today</Badge>
+  if (label === 'Due Today') {
+    return <Badge tone="yellow">Due Today</Badge>
   }
 
-  if (status === 'Pending') {
-    return <Badge tone="blue">Pending</Badge>
+  if (label === 'Upcoming') {
+    return <Badge tone="blue">Upcoming</Badge>
   }
 
-  return <Badge tone="gray">{status}</Badge>
+  return <Badge tone="gray">{label}</Badge>
 }
 
 function Badge({
@@ -2923,6 +2939,42 @@ function isFollowUpUpcoming(lead: Lead) {
     followUpDate !== null &&
     followUpDate.getTime() > Date.now()
   )
+}
+
+function isFollowUpAfterToday(lead: Lead) {
+  const followUpDate = parseSupabaseTimestamp(lead.follow_up_at)
+
+  return (
+    isPendingFollowUp(lead) &&
+    followUpDate !== null &&
+    getTorontoDateKey(followUpDate) > getTorontoDateKey(new Date())
+  )
+}
+
+function getFollowUpDisplayLabel(lead: Lead) {
+  const status = getFollowUpStatus(lead)
+
+  if (status === 'Not set') {
+    return '-'
+  }
+
+  if (status === 'Completed' || status === 'Snoozed') {
+    return status
+  }
+
+  if (status === 'Pending' && isFollowUpOverdue(lead)) {
+    return 'Overdue'
+  }
+
+  if (status === 'Pending' && isFollowUpDueToday(lead)) {
+    return 'Due Today'
+  }
+
+  if (status === 'Pending' && isFollowUpAfterToday(lead)) {
+    return 'Upcoming'
+  }
+
+  return '-'
 }
 
 function formatChartDateLabel(dateKey: string) {
