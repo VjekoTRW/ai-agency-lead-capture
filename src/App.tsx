@@ -57,6 +57,10 @@ type Lead = {
   ai_summary?: string | null
   ai_recommendation?: string | null
   ai_summary_updated_at?: string | null
+  follow_up_sequence_status?: string | null
+  last_follow_up_sent_at?: string | null
+  next_sequence_step?: string | null
+  follow_up_message_log?: string | null
   status?: string | null
   notes?: string | null
   booked_at?: string | null
@@ -98,6 +102,23 @@ const followUpStatusOptions = [
 ] as const
 
 const followUpTypeOptions = ['Call', 'Email', 'Text', 'Other'] as const
+
+const followUpSequenceStatusOptions = [
+  'Not started',
+  'Active',
+  'Paused',
+  'Completed',
+  'Stopped',
+] as const
+
+const sequenceStepOptions = [
+  'Initial follow-up',
+  '24-hour reminder',
+  '3-day reminder',
+  'Final check-in',
+] as const
+
+const sequenceStepValues = [...sequenceStepOptions, 'Completed'] as const
 
 const appointmentHourOptions = [
   '01',
@@ -1085,10 +1106,14 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [savingAiSummaryLeadKey, setSavingAiSummaryLeadKey] = useState<
     string | null
   >(null)
+  const [savingSequenceLeadKey, setSavingSequenceLeadKey] = useState<
+    string | null
+  >(null)
   const [noteMessage, setNoteMessage] = useState('')
   const [appointmentMessage, setAppointmentMessage] = useState('')
   const [followUpMessage, setFollowUpMessage] = useState('')
   const [aiSummaryMessage, setAiSummaryMessage] = useState('')
+  const [sequenceMessage, setSequenceMessage] = useState('')
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -1408,6 +1433,51 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     setSavingAiSummaryLeadKey(null)
   }
 
+  const handleSaveSequence = async (
+    lead: Lead,
+    sequence: {
+      sequenceStatus?: string
+      nextSequenceStep?: string
+      messageLog?: string
+      markSent?: boolean
+    },
+  ) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+    const payload = buildSequencePayload(lead, sequence, updatedAt)
+
+    setSavingSequenceLeadKey(leadKey)
+    setSequenceMessage('')
+
+    const query = supabase.from('leads').update(payload)
+    const { error: sequenceError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (sequenceError) {
+      setSequenceMessage(`Error: ${sequenceError.message}`)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, ...payload }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, ...payload }
+          : currentLead,
+      )
+      setSequenceMessage(
+        sequence.markSent ? 'Follow-up marked sent.' : 'Sequence updated.',
+      )
+    }
+
+    setSavingSequenceLeadKey(null)
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     navigate('/login')
@@ -1692,7 +1762,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-[1640px] w-full text-left text-sm">
+                  <table className="min-w-[1760px] w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
                       <tr>
                         <th className="px-4 py-3">Name</th>
@@ -1709,6 +1779,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                         <th className="px-4 py-3">appointment_status</th>
                         <th className="px-4 py-3">Follow-Up Status</th>
                         <th className="px-4 py-3">Next Follow-Up</th>
+                        <th className="px-4 py-3">Sequence Status</th>
                         <th className="px-4 py-3">status</th>
                       </tr>
                     </thead>
@@ -1722,6 +1793,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             setAppointmentMessage('')
                             setFollowUpMessage('')
                             setAiSummaryMessage('')
+                            setSequenceMessage('')
                           }}
                           className="cursor-pointer align-top transition hover:bg-slate-50"
                         >
@@ -1779,6 +1851,11 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             {formatTorontoDate(lead.follow_up_at)}
                           </td>
                           <td className="px-4 py-3">
+                            <Badge tone="gray">
+                              {getFollowUpSequenceStatus(lead)}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
                             <select
                               value={getLeadStatus(lead)}
                               disabled={updatingLeadKey === getLeadKey(lead)}
@@ -1817,14 +1894,17 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
           isSavingAiSummary={
             savingAiSummaryLeadKey === getLeadKey(selectedLead)
           }
+          isSavingSequence={savingSequenceLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
           appointmentMessage={appointmentMessage}
           followUpMessage={followUpMessage}
           aiSummaryMessage={aiSummaryMessage}
+          sequenceMessage={sequenceMessage}
           onSaveNote={handleSaveNote}
           onSaveAppointment={handleSaveAppointment}
           onSaveFollowUp={handleSaveFollowUp}
           onGenerateAiSummary={handleGenerateAiSummary}
+          onSaveSequence={handleSaveSequence}
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
@@ -1973,14 +2053,17 @@ function LeadDetailModal({
   isSavingAppointment,
   isSavingFollowUp,
   isSavingAiSummary,
+  isSavingSequence,
   noteMessage,
   appointmentMessage,
   followUpMessage,
   aiSummaryMessage,
+  sequenceMessage,
   onSaveNote,
   onSaveAppointment,
   onSaveFollowUp,
   onGenerateAiSummary,
+  onSaveSequence,
   onClose,
 }: {
   lead: Lead
@@ -1988,10 +2071,12 @@ function LeadDetailModal({
   isSavingAppointment: boolean
   isSavingFollowUp: boolean
   isSavingAiSummary: boolean
+  isSavingSequence: boolean
   noteMessage: string
   appointmentMessage: string
   followUpMessage: string
   aiSummaryMessage: string
+  sequenceMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
   onSaveAppointment: (
     lead: Lead,
@@ -2017,6 +2102,15 @@ function LeadDetailModal({
     },
   ) => Promise<void>
   onGenerateAiSummary: (lead: Lead) => Promise<void>
+  onSaveSequence: (
+    lead: Lead,
+    sequence: {
+      sequenceStatus?: string
+      nextSequenceStep?: string
+      messageLog?: string
+      markSent?: boolean
+    },
+  ) => Promise<void>
   onClose: () => void
 }) {
   const [notes, setNotes] = useState(lead.notes ?? '')
@@ -2035,6 +2129,15 @@ function LeadDetailModal({
     formatAppointmentFields(lead.follow_up_at),
   )
   const [followUpNotes, setFollowUpNotes] = useState(lead.follow_up_notes ?? '')
+  const [sequenceStatus, setSequenceStatus] = useState(
+    getFollowUpSequenceStatus(lead),
+  )
+  const [nextSequenceStep, setNextSequenceStep] = useState(
+    getNextSequenceStep(lead),
+  )
+  const [sequenceMessageLog, setSequenceMessageLog] = useState(
+    lead.follow_up_message_log ?? '',
+  )
   const [copyMessage, setCopyMessage] = useState('')
   const calendlyLink =
     typeof lead.calendly_url === 'string' && lead.calendly_url.trim().length > 0
@@ -2053,6 +2156,9 @@ function LeadDetailModal({
     setFollowUpType(getFollowUpType(lead))
     setFollowUpAtFields(formatAppointmentFields(lead.follow_up_at))
     setFollowUpNotes(lead.follow_up_notes ?? '')
+    setSequenceStatus(getFollowUpSequenceStatus(lead))
+    setNextSequenceStep(getNextSequenceStep(lead))
+    setSequenceMessageLog(lead.follow_up_message_log ?? '')
     setCopyMessage('')
   }, [lead])
 
@@ -2501,6 +2607,152 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="Follow-Up Sequence">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Sequence status
+                  </span>
+                  <select
+                    value={sequenceStatus}
+                    onChange={(event) => setSequenceStatus(event.target.value)}
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {followUpSequenceStatusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Next sequence step
+                  </span>
+                  <select
+                    value={nextSequenceStep}
+                    onChange={(event) => setNextSequenceStep(event.target.value)}
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {sequenceStepOptions.map((step) => (
+                      <option key={step} value={step}>
+                        {step}
+                      </option>
+                    ))}
+                    {nextSequenceStep === 'Completed' ? (
+                      <option value="Completed">Completed</option>
+                    ) : null}
+                  </select>
+                </label>
+              </div>
+
+              <DetailField
+                label="Last follow-up sent"
+                value={formatTorontoDate(lead.last_follow_up_sent_at)}
+              />
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                  Message log
+                </span>
+                <textarea
+                  value={sequenceMessageLog}
+                  onChange={(event) => setSequenceMessageLog(event.target.value)}
+                  placeholder="Track manual follow-up sequence notes"
+                  className="min-h-32 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                />
+              </label>
+
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <button
+                  type="button"
+                  disabled={isSavingSequence}
+                  onClick={() =>
+                    onSaveSequence(lead, {
+                      sequenceStatus: 'Active',
+                      nextSequenceStep: 'Initial follow-up',
+                      messageLog: sequenceMessageLog,
+                    })
+                  }
+                  className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Start sequence
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingSequence}
+                  onClick={() =>
+                    onSaveSequence(lead, {
+                      sequenceStatus: 'Paused',
+                      nextSequenceStep,
+                      messageLog: sequenceMessageLog,
+                    })
+                  }
+                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Pause sequence
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingSequence}
+                  onClick={() =>
+                    onSaveSequence(lead, {
+                      sequenceStatus: 'Completed',
+                      nextSequenceStep,
+                      messageLog: sequenceMessageLog,
+                    })
+                  }
+                  className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Mark completed
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingSequence}
+                  onClick={() =>
+                    onSaveSequence(lead, {
+                      sequenceStatus: 'Stopped',
+                      nextSequenceStep,
+                      messageLog: sequenceMessageLog,
+                    })
+                  }
+                  className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Stop sequence
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingSequence}
+                  onClick={() =>
+                    onSaveSequence(lead, {
+                      sequenceStatus,
+                      nextSequenceStep,
+                      messageLog: sequenceMessageLog,
+                      markSent: true,
+                    })
+                  }
+                  className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Mark follow-up sent
+                </button>
+                {sequenceMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      sequenceMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {sequenceMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="AI Qualification">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Lead score" value={getLeadScore(lead)} />
@@ -2572,6 +2824,14 @@ function LeadDetailModal({
                 <DetailField
                   label="Next follow-up"
                   value={formatTorontoDate(lead.follow_up_at)}
+                />
+                <DetailField
+                  label="Sequence status"
+                  value={getFollowUpSequenceStatus(lead)}
+                />
+                <DetailField
+                  label="Next sequence step"
+                  value={getNextSequenceStep(lead)}
                 />
                 <DetailField
                   label="Created at"
@@ -2801,6 +3061,23 @@ function buildLeadActivityItems(lead: Lead) {
     })
   }
 
+  activityItems.push({
+    label: `Follow-up sequence status: ${getFollowUpSequenceStatus(lead)}`,
+    time: formatTorontoDate(lead.updated_at ?? lead.created_at),
+  })
+
+  if (lead.last_follow_up_sent_at) {
+    activityItems.push({
+      label: 'Last follow-up sent',
+      time: formatTorontoDate(lead.last_follow_up_sent_at),
+    })
+  }
+
+  activityItems.push({
+    label: `Next sequence step: ${getNextSequenceStep(lead)}`,
+    time: formatTorontoDate(lead.updated_at ?? lead.created_at),
+  })
+
   if (typeof lead.notes === 'string' && lead.notes.trim().length > 0) {
     activityItems.push({
       label: 'Internal note added',
@@ -2949,6 +3226,15 @@ function buildDashboardAnalytics(
   const averageLeadScore =
     total > 0 ? Math.round(totalLeadScore / total) : 0
   const highIntentLeads = leads.filter((lead) => getLeadScore(lead) >= 75).length
+  const activeSequences = leads.filter(
+    (lead) => getFollowUpSequenceStatus(lead) === 'Active',
+  ).length
+  const pausedSequences = leads.filter(
+    (lead) => getFollowUpSequenceStatus(lead) === 'Paused',
+  ).length
+  const completedSequences = leads.filter(
+    (lead) => getFollowUpSequenceStatus(lead) === 'Completed',
+  ).length
 
   return {
     kpiCards: [
@@ -2963,6 +3249,9 @@ function buildDashboardAnalytics(
       { label: 'Follow-ups Due Today', value: followUpsDueToday },
       { label: 'Overdue Follow-ups', value: overdueFollowUps },
       { label: 'Upcoming Follow-ups', value: upcomingFollowUps },
+      { label: 'Active Sequences', value: activeSequences },
+      { label: 'Paused Sequences', value: pausedSequences },
+      { label: 'Completed Sequences', value: completedSequences },
     ],
     qualificationRate: calculatePercentage(qualified, total),
     bookingRate: calculatePercentage(booked, total),
@@ -3248,6 +3537,97 @@ function getValidFollowUpType(type: string) {
   return followUpTypeOptions.includes(type as (typeof followUpTypeOptions)[number])
     ? type
     : 'Call'
+}
+
+function getFollowUpSequenceStatus(lead: Lead) {
+  return getValidFollowUpSequenceStatus(
+    typeof lead.follow_up_sequence_status === 'string'
+      ? lead.follow_up_sequence_status
+      : '',
+  )
+}
+
+function getValidFollowUpSequenceStatus(status: string) {
+  return followUpSequenceStatusOptions.includes(
+    status as (typeof followUpSequenceStatusOptions)[number],
+  )
+    ? status
+    : 'Not started'
+}
+
+function getNextSequenceStep(lead: Lead) {
+  return getValidNextSequenceStep(
+    typeof lead.next_sequence_step === 'string' ? lead.next_sequence_step : '',
+  )
+}
+
+function getValidNextSequenceStep(step: string) {
+  return sequenceStepValues.includes(step as (typeof sequenceStepValues)[number])
+    ? step
+    : 'Initial follow-up'
+}
+
+function buildSequencePayload(
+  lead: Lead,
+  sequence: {
+    sequenceStatus?: string
+    nextSequenceStep?: string
+    messageLog?: string
+    markSent?: boolean
+  },
+  updatedAt: string,
+) {
+  const sequenceStatus = getValidFollowUpSequenceStatus(
+    sequence.sequenceStatus ?? getFollowUpSequenceStatus(lead),
+  )
+  const nextSequenceStep = getValidNextSequenceStep(
+    sequence.nextSequenceStep ?? getNextSequenceStep(lead),
+  )
+  const messageLog =
+    sequence.messageLog ??
+    (typeof lead.follow_up_message_log === 'string'
+      ? lead.follow_up_message_log
+      : '')
+
+  if (!sequence.markSent) {
+    return {
+      follow_up_sequence_status: sequenceStatus,
+      next_sequence_step: nextSequenceStep,
+      follow_up_message_log: messageLog,
+      updated_at: updatedAt,
+    }
+  }
+
+  const advancedStep = getAdvancedSequenceStep(nextSequenceStep)
+  const sentLine = `[${formatTorontoDate(updatedAt)}] Marked ${nextSequenceStep} as sent`
+  const nextMessageLog = messageLog.trim()
+    ? `${messageLog.trim()}\n${sentLine}`
+    : sentLine
+
+  return {
+    follow_up_sequence_status:
+      advancedStep === 'Completed' ? 'Completed' : sequenceStatus,
+    last_follow_up_sent_at: updatedAt,
+    next_sequence_step: advancedStep,
+    follow_up_message_log: nextMessageLog,
+    updated_at: updatedAt,
+  }
+}
+
+function getAdvancedSequenceStep(step: string) {
+  if (step === 'Initial follow-up') {
+    return '24-hour reminder'
+  }
+
+  if (step === '24-hour reminder') {
+    return '3-day reminder'
+  }
+
+  if (step === '3-day reminder') {
+    return 'Final check-in'
+  }
+
+  return 'Completed'
 }
 
 function calculateLeadScore(lead: Lead) {
