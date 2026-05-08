@@ -54,6 +54,9 @@ type Lead = {
   lead_temperature?: string | null
   status?: string | null
   notes?: string | null
+  booked_at?: string | null
+  appointment_notes?: string | null
+  appointment_status?: string | null
   calendly_url?: string | null
   submission_history?: unknown
   submissions?: unknown
@@ -68,6 +71,14 @@ const statusOptions = [
   'Booked',
   'Closed',
   'Lost',
+] as const
+
+const appointmentStatusOptions = [
+  'Not booked',
+  'Booked',
+  'Completed',
+  'Cancelled',
+  'No-show',
 ] as const
 
 const temperatureOptions = ['HOT', 'WARM', 'COLD'] as const
@@ -1025,7 +1036,11 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [updatingLeadKey, setUpdatingLeadKey] = useState<string | null>(null)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [savingNoteLeadKey, setSavingNoteLeadKey] = useState<string | null>(null)
+  const [savingAppointmentLeadKey, setSavingAppointmentLeadKey] = useState<
+    string | null
+  >(null)
   const [noteMessage, setNoteMessage] = useState('')
+  const [appointmentMessage, setAppointmentMessage] = useState('')
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -1151,6 +1166,58 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     }
 
     setSavingNoteLeadKey(null)
+  }
+
+  const handleSaveAppointment = async (
+    lead: Lead,
+    appointment: {
+      appointmentStatus: string
+      bookedAt: string
+      appointmentNotes: string
+    },
+  ) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+    const nextAppointmentStatus = getValidAppointmentStatus(
+      appointment.appointmentStatus,
+    )
+    const nextBookedAt = parseDateTimeLocalInput(appointment.bookedAt)
+    const appointmentPayload = {
+      appointment_status: nextAppointmentStatus,
+      booked_at: nextBookedAt,
+      appointment_notes: appointment.appointmentNotes,
+      updated_at: updatedAt,
+      ...(nextAppointmentStatus === 'Booked' ? { status: 'Booked' } : {}),
+    }
+
+    setSavingAppointmentLeadKey(leadKey)
+    setAppointmentMessage('')
+
+    const query = supabase.from('leads').update(appointmentPayload)
+    const { error: appointmentError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (appointmentError) {
+      setAppointmentMessage(`Error: ${appointmentError.message}`)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, ...appointmentPayload }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, ...appointmentPayload }
+          : currentLead,
+      )
+      setAppointmentMessage('Appointment saved.')
+    }
+
+    setSavingAppointmentLeadKey(null)
   }
 
   const handleSignOut = async () => {
@@ -1430,7 +1497,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-[1180px] w-full text-left text-sm">
+                  <table className="min-w-[1320px] w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
                       <tr>
                         <th className="px-4 py-3">Name</th>
@@ -1443,6 +1510,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                         <th className="px-4 py-3">submission_count</th>
                         <th className="px-4 py-3">created_at</th>
                         <th className="px-4 py-3">lead_temperature</th>
+                        <th className="px-4 py-3">appointment_status</th>
                         <th className="px-4 py-3">status</th>
                       </tr>
                     </thead>
@@ -1453,6 +1521,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                           onClick={() => {
                             setSelectedLead(lead)
                             setNoteMessage('')
+                            setAppointmentMessage('')
                           }}
                           className="cursor-pointer align-top transition hover:bg-slate-50"
                         >
@@ -1496,6 +1565,11 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             />
                           </td>
                           <td className="px-4 py-3">
+                            <Badge tone="gray">
+                              {getAppointmentStatus(lead)}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
                             <select
                               value={getLeadStatus(lead)}
                               disabled={updatingLeadKey === getLeadKey(lead)}
@@ -1527,8 +1601,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
         <LeadDetailModal
           lead={selectedLead}
           isSavingNote={savingNoteLeadKey === getLeadKey(selectedLead)}
+          isSavingAppointment={
+            savingAppointmentLeadKey === getLeadKey(selectedLead)
+          }
           noteMessage={noteMessage}
+          appointmentMessage={appointmentMessage}
           onSaveNote={handleSaveNote}
+          onSaveAppointment={handleSaveAppointment}
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
@@ -1674,17 +1753,37 @@ function FilterSelect({
 function LeadDetailModal({
   lead,
   isSavingNote,
+  isSavingAppointment,
   noteMessage,
+  appointmentMessage,
   onSaveNote,
+  onSaveAppointment,
   onClose,
 }: {
   lead: Lead
   isSavingNote: boolean
+  isSavingAppointment: boolean
   noteMessage: string
+  appointmentMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
+  onSaveAppointment: (
+    lead: Lead,
+    appointment: {
+      appointmentStatus: string
+      bookedAt: string
+      appointmentNotes: string
+    },
+  ) => Promise<void>
   onClose: () => void
 }) {
   const [notes, setNotes] = useState(lead.notes ?? '')
+  const [appointmentStatus, setAppointmentStatus] = useState(
+    getAppointmentStatus(lead),
+  )
+  const [bookedAt, setBookedAt] = useState(formatDateTimeLocal(lead.booked_at))
+  const [appointmentNotes, setAppointmentNotes] = useState(
+    lead.appointment_notes ?? '',
+  )
   const [copyMessage, setCopyMessage] = useState('')
   const calendlyLink =
     typeof lead.calendly_url === 'string' && lead.calendly_url.trim().length > 0
@@ -1696,6 +1795,9 @@ function LeadDetailModal({
 
   useEffect(() => {
     setNotes(lead.notes ?? '')
+    setAppointmentStatus(getAppointmentStatus(lead))
+    setBookedAt(formatDateTimeLocal(lead.booked_at))
+    setAppointmentNotes(lead.appointment_notes ?? '')
     setCopyMessage('')
   }, [lead])
 
@@ -1826,12 +1928,95 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="Appointment">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Appointment status
+                  </span>
+                  <select
+                    value={appointmentStatus}
+                    onChange={(event) =>
+                      setAppointmentStatus(event.target.value)
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {appointmentStatusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Booked at
+                  </span>
+                  <input
+                    type="datetime-local"
+                    value={bookedAt}
+                    onChange={(event) => setBookedAt(event.target.value)}
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                  Appointment notes
+                </span>
+                <textarea
+                  value={appointmentNotes}
+                  onChange={(event) => setAppointmentNotes(event.target.value)}
+                  placeholder="Add appointment details or manual booking context"
+                  className="min-h-32 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                />
+              </label>
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingAppointment}
+                  onClick={() =>
+                    onSaveAppointment(lead, {
+                      appointmentStatus,
+                      bookedAt,
+                      appointmentNotes,
+                    })
+                  }
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingAppointment ? 'Saving...' : 'Save appointment'}
+                </button>
+                {appointmentMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      appointmentMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {appointmentMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="Pipeline">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
                 <DetailField
+                  label="Appointment status"
+                  value={getAppointmentStatus(lead)}
+                />
+                <DetailField
                   label="Lead temperature"
                   value={getLeadTemperature(lead)}
+                />
+                <DetailField
+                  label="Booked at"
+                  value={formatTorontoDate(lead.booked_at)}
                 />
                 <DetailField
                   label="Created at"
@@ -2006,6 +2191,18 @@ function buildLeadActivityItems(lead: Lead) {
     time: 'Now',
   })
 
+  if (lead.booked_at) {
+    activityItems.push({
+      label: 'Appointment booked',
+      time: formatTorontoDate(lead.booked_at),
+    })
+  }
+
+  activityItems.push({
+    label: `Appointment status: ${getAppointmentStatus(lead)}`,
+    time: lead.booked_at ? formatTorontoDate(lead.booked_at) : 'Now',
+  })
+
   if (typeof lead.notes === 'string' && lead.notes.trim().length > 0) {
     activityItems.push({
       label: 'Internal note added',
@@ -2097,7 +2294,10 @@ function buildDashboardAnalytics(
 
   const total = leads.length
   const qualified = statusCounts.Qualified
-  const booked = statusCounts.Booked
+  const booked = leads.filter(
+    (lead) =>
+      getLeadStatus(lead) === 'Booked' || getAppointmentStatus(lead) === 'Booked',
+  ).length
   const closed = statusCounts.Closed
 
   return {
@@ -2279,6 +2479,20 @@ function getLeadStatus(lead: Lead) {
     : 'New'
 }
 
+function getAppointmentStatus(lead: Lead) {
+  return getValidAppointmentStatus(
+    typeof lead.appointment_status === 'string' ? lead.appointment_status : '',
+  )
+}
+
+function getValidAppointmentStatus(status: string) {
+  return appointmentStatusOptions.includes(
+    status as (typeof appointmentStatusOptions)[number],
+  )
+    ? status
+    : 'Not booked'
+}
+
 function getLeadTemperature(lead: Lead) {
   const explicitTemperature =
     typeof lead.lead_temperature === 'string'
@@ -2329,6 +2543,89 @@ function parseSupabaseTimestamp(timestamp: unknown) {
   }
 
   return date
+}
+
+function parseDateTimeLocalInput(value: string) {
+  if (!value) {
+    return null
+  }
+
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/,
+  )
+
+  if (!match) {
+    return null
+  }
+
+  const [, year, month, day, hour, minute] = match
+  const wallTimeAsUtc = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+  )
+  const offset = getTimeZoneOffsetMs(
+    'America/Toronto',
+    new Date(wallTimeAsUtc),
+  )
+  const date = new Date(wallTimeAsUtc - offset)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return date.toISOString()
+}
+
+function formatDateTimeLocal(timestamp: unknown) {
+  const date = parseSupabaseTimestamp(timestamp)
+
+  if (!date) {
+    return ''
+  }
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const valueByType = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  )
+
+  return `${valueByType.year}-${valueByType.month}-${valueByType.day}T${valueByType.hour}:${valueByType.minute}`
+}
+
+function getTimeZoneOffsetMs(timeZone: string, date: Date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const valueByType = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  )
+  const zonedTimeAsUtc = Date.UTC(
+    Number(valueByType.year),
+    Number(valueByType.month) - 1,
+    Number(valueByType.day),
+    Number(valueByType.hour),
+    Number(valueByType.minute),
+    Number(valueByType.second),
+  )
+
+  return zonedTimeAsUtc - date.getTime()
 }
 
 function formatTorontoDate(timestamp: unknown) {
