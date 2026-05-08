@@ -19,6 +19,8 @@ import * as metaPixel from './lib/metaPixel'
 const bookingUrl = 'https://calendly.com/vjeko-ai/free-automation-audit'
 const N8N_WEBHOOK_URL =
   'https://n8n-xmxo3s5m4sn69amy166p54bn.34.130.94.98.sslip.io/webhook/new-ai-agency-lead'
+const N8N_SEQUENCE_WEBHOOK_URL =
+  import.meta.env.VITE_N8N_SEQUENCE_WEBHOOK_URL ?? ''
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -1440,6 +1442,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       nextSequenceStep?: string
       messageLog?: string
       markSent?: boolean
+      sentVia?: 'manual' | 'n8n'
     },
   ) => {
     const leadKey = getLeadKey(lead)
@@ -1472,6 +1475,83 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
       )
       setSequenceMessage(
         sequence.markSent ? 'Follow-up marked sent.' : 'Sequence updated.',
+      )
+    }
+
+    setSavingSequenceLeadKey(null)
+  }
+
+  const handleSendSequenceStep = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    setSavingSequenceLeadKey(leadKey)
+    setSequenceMessage('')
+
+    if (!N8N_SEQUENCE_WEBHOOK_URL) {
+      setSequenceMessage('Error: n8n sequence webhook URL is not configured.')
+      setSavingSequenceLeadKey(null)
+      return
+    }
+
+    if (!canSendCurrentSequenceStep(lead)) {
+      setSequenceMessage(
+        'Error: Sequence must be active with a valid step and email or phone.',
+      )
+      setSavingSequenceLeadKey(null)
+      return
+    }
+
+    try {
+      const response = await fetch(N8N_SEQUENCE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildSequenceWebhookPayload(lead)),
+      })
+
+      if (!response.ok) {
+        throw new Error(`n8n webhook failed with status ${response.status}`)
+      }
+
+      const updatedAt = new Date().toISOString()
+      const payload = buildSequencePayload(
+        lead,
+        {
+          sequenceStatus: getFollowUpSequenceStatus(lead),
+          nextSequenceStep: getNextSequenceStep(lead),
+          messageLog:
+            typeof lead.follow_up_message_log === 'string'
+              ? lead.follow_up_message_log
+              : '',
+          markSent: true,
+          sentVia: 'n8n',
+        },
+        updatedAt,
+      )
+      const query = supabase.from('leads').update(payload)
+      const { error: sequenceError } =
+        lead.id !== undefined && lead.id !== null
+          ? await query.eq('id', lead.id)
+          : await query.eq('email', lead.email)
+
+      if (sequenceError) {
+        setSequenceMessage(`Error: ${sequenceError.message}`)
+      } else {
+        setLeads((currentLeads) =>
+          currentLeads.map((currentLead) =>
+            getLeadKey(currentLead) === leadKey
+              ? { ...currentLead, ...payload }
+              : currentLead,
+          ),
+        )
+        setSelectedLead((currentLead) =>
+          currentLead && getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, ...payload }
+            : currentLead,
+        )
+        setSequenceMessage('Current step sent via n8n.')
+      }
+    } catch (error) {
+      setSequenceMessage(
+        `Error: ${error instanceof Error ? error.message : 'Could not send current step.'}`,
       )
     }
 
@@ -1905,6 +1985,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
           onSaveFollowUp={handleSaveFollowUp}
           onGenerateAiSummary={handleGenerateAiSummary}
           onSaveSequence={handleSaveSequence}
+          onSendSequenceStep={handleSendSequenceStep}
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
@@ -2064,6 +2145,7 @@ function LeadDetailModal({
   onSaveFollowUp,
   onGenerateAiSummary,
   onSaveSequence,
+  onSendSequenceStep,
   onClose,
 }: {
   lead: Lead
@@ -2109,8 +2191,10 @@ function LeadDetailModal({
       nextSequenceStep?: string
       messageLog?: string
       markSent?: boolean
+      sentVia?: 'manual' | 'n8n'
     },
   ) => Promise<void>
+  onSendSequenceStep: (lead: Lead) => Promise<void>
   onClose: () => void
 }) {
   const [notes, setNotes] = useState(lead.notes ?? '')
@@ -2733,11 +2817,20 @@ function LeadDetailModal({
                       nextSequenceStep,
                       messageLog: sequenceMessageLog,
                       markSent: true,
+                      sentVia: 'manual',
                     })
                   }
                   className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Mark follow-up sent
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingSequence || !canSendCurrentSequenceStep(lead)}
+                  onClick={() => onSendSequenceStep(lead)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingSequence ? 'Sending...' : 'Send current step'}
                 </button>
                 {sequenceMessage ? (
                   <p
@@ -3574,6 +3667,7 @@ function buildSequencePayload(
     nextSequenceStep?: string
     messageLog?: string
     markSent?: boolean
+    sentVia?: 'manual' | 'n8n'
   },
   updatedAt: string,
 ) {
@@ -3599,7 +3693,9 @@ function buildSequencePayload(
   }
 
   const advancedStep = getAdvancedSequenceStep(nextSequenceStep)
-  const sentLine = `[${formatTorontoDate(updatedAt)}] Marked ${nextSequenceStep} as sent`
+  const sentAction = sequence.sentVia === 'n8n' ? 'Sent' : 'Marked'
+  const sentSuffix = sequence.sentVia === 'n8n' ? ' via n8n' : ''
+  const sentLine = `[${formatTorontoDate(updatedAt)}] ${sentAction} ${nextSequenceStep} as sent${sentSuffix}`
   const nextMessageLog = messageLog.trim()
     ? `${messageLog.trim()}\n${sentLine}`
     : sentLine
@@ -3628,6 +3724,38 @@ function getAdvancedSequenceStep(step: string) {
   }
 
   return 'Completed'
+}
+
+function canSendCurrentSequenceStep(lead: Lead) {
+  const hasContact =
+    (typeof lead.email === 'string' && lead.email.trim().length > 0) ||
+    (typeof lead.phone === 'string' && lead.phone.trim().length > 0)
+  const nextSequenceStep = getNextSequenceStep(lead)
+
+  return (
+    getFollowUpSequenceStatus(lead) === 'Active' &&
+    sequenceStepOptions.includes(
+      nextSequenceStep as (typeof sequenceStepOptions)[number],
+    ) &&
+    hasContact
+  )
+}
+
+function buildSequenceWebhookPayload(lead: Lead) {
+  return {
+    lead_id: lead.id ?? null,
+    name: lead.name ?? null,
+    email: lead.email ?? null,
+    phone: lead.phone ?? null,
+    business_name: lead.business_name ?? null,
+    service_type: lead.service_type ?? null,
+    lead_score: getLeadScore(lead),
+    lead_temperature: getLeadTemperature(lead),
+    ai_summary: lead.ai_summary ?? null,
+    ai_recommendation: lead.ai_recommendation ?? null,
+    next_sequence_step: getNextSequenceStep(lead),
+    follow_up_sequence_status: getFollowUpSequenceStatus(lead),
+  }
 }
 
 function calculateLeadScore(lead: Lead) {
