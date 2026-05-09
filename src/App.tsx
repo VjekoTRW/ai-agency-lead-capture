@@ -1511,43 +1511,34 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
         throw new Error(`n8n webhook failed with status ${response.status}`)
       }
 
-      const updatedAt = new Date().toISOString()
-      const payload = buildSequencePayload(
-        lead,
-        {
-          sequenceStatus: getFollowUpSequenceStatus(lead),
-          nextSequenceStep: getNextSequenceStep(lead),
-          messageLog:
-            typeof lead.follow_up_message_log === 'string'
-              ? lead.follow_up_message_log
-              : '',
-          markSent: true,
-          sentVia: 'n8n',
-        },
-        updatedAt,
-      )
-      const query = supabase.from('leads').update(payload)
-      const { error: sequenceError } =
-        lead.id !== undefined && lead.id !== null
-          ? await query.eq('id', lead.id)
-          : await query.eq('email', lead.email)
+      if (lead.id === undefined || lead.id === null) {
+        throw new Error('Lead id is required to refresh the sequence update.')
+      }
+
+      const { data: refreshedLead, error: sequenceError } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', lead.id)
+        .single()
 
       if (sequenceError) {
         setSequenceMessage(`Error: ${sequenceError.message}`)
       } else {
+        const updatedLead = applyLeadScore(refreshedLead as Lead)
+
         setLeads((currentLeads) =>
           currentLeads.map((currentLead) =>
             getLeadKey(currentLead) === leadKey
-              ? { ...currentLead, ...payload }
+              ? updatedLead
               : currentLead,
           ),
         )
         setSelectedLead((currentLead) =>
           currentLead && getLeadKey(currentLead) === leadKey
-            ? { ...currentLead, ...payload }
+            ? updatedLead
             : currentLead,
         )
-        setSequenceMessage('Current step sent via n8n.')
+        setSequenceMessage('Follow-up sent and sequence updated.')
       }
     } catch (error) {
       setSequenceMessage(
