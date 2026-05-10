@@ -2724,6 +2724,7 @@ function LeadDetailModal({
     lead.follow_up_message_log ?? '',
   )
   const [copyMessage, setCopyMessage] = useState('')
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const calendlyLink =
     typeof lead.calendly_url === 'string' && lead.calendly_url.trim().length > 0
       ? lead.calendly_url.trim()
@@ -2764,14 +2765,22 @@ function LeadDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-end bg-slate-950/70 lg:pl-24"
+      className={`fixed inset-0 z-50 flex bg-slate-950/70 ${
+        isFullscreen
+          ? 'items-center justify-center p-3'
+          : 'items-stretch justify-end lg:pl-24'
+      }`}
       onClick={onClose}
     >
       <div
-        className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-2xl"
+        className={`flex w-full flex-col overflow-hidden bg-white shadow-2xl ${
+          isFullscreen
+            ? 'h-[calc(100vh-1.5rem)] max-w-[min(1600px,calc(100vw-1.5rem))] rounded-lg'
+            : 'h-full max-w-5xl'
+        }`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <p className="text-sm font-medium text-slate-500">Lead detail</p>
             <h2 className="text-xl font-bold text-slate-950">
@@ -2789,13 +2798,22 @@ function LeadDetailModal({
               <Badge tone="gray">{getLeadStatus(lead)}</Badge>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Close
-          </button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsFullscreen((currentValue) => !currentValue)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
@@ -2833,7 +2851,13 @@ function LeadDetailModal({
             ) : null}
           </div>
 
-          <div className="grid min-w-0 gap-5 lg:grid-cols-2">
+          <div
+            className={`grid min-w-0 gap-5 ${
+              isFullscreen
+                ? 'lg:grid-cols-2 2xl:grid-cols-3'
+                : 'lg:grid-cols-2'
+            }`}
+          >
             <DetailSection title="Contact">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Name" value={lead.name} />
