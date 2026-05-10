@@ -161,6 +161,7 @@ const timeRangeOptions = [
 ] as const
 
 type TimeRange = (typeof timeRangeOptions)[number]
+type DashboardView = 'leads' | 'analytics'
 
 function App() {
   const [path, setPath] = useState(window.location.pathname)
@@ -201,8 +202,14 @@ function App() {
     setPath(nextPath)
   }
 
-  if (path === '/dashboard') {
-    return <ProtectedDashboard authState={authState} navigate={navigate} />
+  if (path === '/dashboard' || path === '/dashboard/analytics') {
+    return (
+      <ProtectedDashboard
+        authState={authState}
+        navigate={navigate}
+        currentPath={path}
+      />
+    )
   }
 
   if (path === '/login') {
@@ -965,9 +972,11 @@ function LandingPage() {
 function ProtectedDashboard({
   authState,
   navigate,
+  currentPath,
 }: {
   authState: AuthState
   navigate: (path: string) => void
+  currentPath: string
 }) {
   useEffect(() => {
     if (authState === 'unauthenticated') {
@@ -985,7 +994,7 @@ function ProtectedDashboard({
     )
   }
 
-  return <DashboardPage navigate={navigate} />
+  return <DashboardPage navigate={navigate} currentPath={currentPath} />
 }
 
 function LoginPage({
@@ -1095,8 +1104,18 @@ function LoginPage({
   )
 }
 
-function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
+function DashboardPage({
+  navigate,
+  currentPath,
+}: {
+  navigate: (path: string) => void
+  currentPath: string
+}) {
   const [leads, setLeads] = useState<Lead[]>([])
+  const [activeDashboardView, setActiveDashboardView] =
+    useState<DashboardView>(
+      currentPath === '/dashboard/analytics' ? 'analytics' : 'leads',
+    )
   const [timeRange, setTimeRange] = useState<TimeRange>('Last 30 days')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -1152,6 +1171,12 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   useEffect(() => {
     fetchLeads()
   }, [])
+
+  useEffect(() => {
+    setActiveDashboardView(
+      currentPath === '/dashboard/analytics' ? 'analytics' : 'leads',
+    )
+  }, [currentPath])
 
   const timeFilteredLeads = useMemo(
     () => leads.filter((lead) => isLeadInTimeRange(lead, timeRange)),
@@ -1653,11 +1678,31 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
               href="/dashboard"
               onClick={(event) => {
                 event.preventDefault()
+                setActiveDashboardView('leads')
                 navigate('/dashboard')
               }}
-              className="whitespace-nowrap rounded-md bg-cyan-400 px-3 py-2 text-sm font-bold text-slate-950"
+              className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition ${
+                activeDashboardView === 'leads'
+                  ? 'bg-cyan-400 text-slate-950'
+                  : 'text-slate-200 hover:bg-slate-800'
+              }`}
             >
               Leads
+            </a>
+            <a
+              href="/dashboard/analytics"
+              onClick={(event) => {
+                event.preventDefault()
+                setActiveDashboardView('analytics')
+                navigate('/dashboard/analytics')
+              }}
+              className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition ${
+                activeDashboardView === 'analytics'
+                  ? 'bg-cyan-400 text-slate-950'
+                  : 'text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              Analytics
             </a>
           </nav>
         </aside>
@@ -1670,7 +1715,9 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                   Dashboard
                 </p>
                 <h2 className="text-2xl font-bold text-slate-950">
-                  Lead pipeline
+                  {activeDashboardView === 'analytics'
+                    ? 'Analytics dashboard'
+                    : 'Lead pipeline'}
                 </h2>
               </div>
               <div className="flex items-center gap-3">
@@ -1693,6 +1740,15 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
           </header>
 
           <div className="px-5 py-5">
+            {activeDashboardView === 'analytics' ? (
+              <AnalyticsDashboard
+                analytics={dashboardAnalytics}
+                loading={loading}
+                timeRange={timeRange}
+                onTimeRangeChange={setTimeRange}
+              />
+            ) : (
+              <>
             <div className="mb-5 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-500">
@@ -2031,6 +2087,8 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                 </div>
               )}
             </div>
+              </>
+            )}
           </div>
         </section>
       </div>
@@ -2069,14 +2127,26 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
 }
 
 type DashboardAnalytics = {
-  kpiCards: Array<{ label: string; value: number }>
+  kpiCards: Array<{ label: string; value: number | string }>
   qualificationRate: number
   bookingRate: number
   closeRate: number
+  replyRate: number
+  smsReplyRate: number
+  operationalInsights: Array<{ label: string; value: string }>
   temperatureCounts: Record<(typeof temperatureOptions)[number], number>
   leadsOverTime: Array<{ label: string; leads: number }>
-  statusChartData: Array<{ status: string; leads: number }>
+  bookedCallsOverTime: Array<{ label: string; bookedCalls: number }>
+  repliesOverTime: Array<{
+    label: string
+    replies: number
+    smsReplies: number
+  }>
+  temperatureChartData: Array<{ temperature: string; leads: number }>
+  leadSourceChartData: Array<{ leadSource: string; leads: number }>
   serviceTypeChartData: Array<{ serviceType: string; leads: number }>
+  scoreDistributionData: Array<{ scoreRange: string; leads: number }>
+  statusChartData: Array<{ status: string; leads: number }>
 }
 
 function KpiCard({
@@ -2085,7 +2155,7 @@ function KpiCard({
   loading,
 }: {
   label: string
-  value: number
+  value: number | string
   loading: boolean
 }) {
   return (
@@ -2096,6 +2166,185 @@ function KpiCard({
       ) : (
         <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
       )}
+    </div>
+  )
+}
+
+function AnalyticsDashboard({
+  analytics,
+  loading,
+  timeRange,
+  onTimeRangeChange,
+}: {
+  analytics: DashboardAnalytics
+  loading: boolean
+  timeRange: TimeRange
+  onTimeRangeChange: (timeRange: TimeRange) => void
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-500">
+            Performance window
+          </p>
+          <h3 className="text-lg font-bold text-slate-950">
+            CRM analytics
+          </h3>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          {timeRangeOptions.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onTimeRangeChange(option)}
+              className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                timeRange === option
+                  ? 'border-slate-950 bg-slate-950 text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {analytics.kpiCards.map((card) => (
+          <KpiCard
+            key={card.label}
+            label={card.label}
+            value={card.value}
+            loading={loading}
+          />
+        ))}
+      </div>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+          Operational insights
+        </h3>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {analytics.operationalInsights.map((insight) => (
+            <div
+              key={insight.label}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+            >
+              <p className="text-sm font-medium text-slate-500">
+                {insight.label}
+              </p>
+              {loading ? (
+                <div className="mt-3 h-7 w-24 animate-pulse rounded bg-slate-200" />
+              ) : (
+                <p className="mt-2 break-words text-2xl font-bold text-slate-950">
+                  {insight.value}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <ChartCard title="Leads Created Over Time" loading={loading}>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={analytics.leadsOverTime}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <Tooltip />
+              <Line type="monotone" dataKey="leads" stroke="#0891b2" strokeWidth={3} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Booked Calls Over Time" loading={loading}>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={analytics.bookedCallsOverTime}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <Tooltip />
+              <Line type="monotone" dataKey="bookedCalls" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Replies Over Time" loading={loading}>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={analytics.repliesOverTime}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <Tooltip />
+              <Line type="monotone" dataKey="replies" name="Email replies" stroke="#059669" strokeWidth={3} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="smsReplies" name="SMS replies" stroke="#ca8a04" strokeWidth={3} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Lead Temperature Distribution" loading={loading}>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={analytics.temperatureChartData}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="temperature" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <Tooltip />
+              <Bar dataKey="leads" radius={[4, 4, 0, 0]}>
+                {analytics.temperatureChartData.map((item) => (
+                  <Cell
+                    key={item.temperature}
+                    fill={
+                      item.temperature === 'HOT'
+                        ? '#dc2626'
+                        : item.temperature === 'WARM'
+                          ? '#ca8a04'
+                          : '#64748b'
+                    }
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Lead Source Breakdown" loading={loading}>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={analytics.leadSourceChartData}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="leadSource" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <Tooltip />
+              <Bar dataKey="leads" fill="#0f766e" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Service Type Breakdown" loading={loading}>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={analytics.serviceTypeChartData}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="serviceType" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <Tooltip />
+              <Bar dataKey="leads" fill="#334155" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Lead Score Distribution" loading={loading}>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={analytics.scoreDistributionData}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="scoreRange" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <Tooltip />
+              <Bar dataKey="leads" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
     </div>
   )
 }
@@ -3484,7 +3733,17 @@ function buildDashboardAnalytics(
     {} as Record<(typeof temperatureOptions)[number], number>,
   )
   const serviceTypeCounts = new Map<string, number>()
+  const leadSourceCounts = new Map<string, number>()
+  const leadSourceBookedCounts = new Map<string, number>()
   const leadsByDate = new Map<string, number>()
+  const bookedCallsByDate = new Map<string, number>()
+  const repliesByDate = new Map<string, number>()
+  const smsRepliesByDate = new Map<string, number>()
+  const scoreDistributionCounts = new Map([
+    ['0-44', 0],
+    ['45-74', 0],
+    ['75-100', 0],
+  ])
 
   leads.forEach((lead) => {
     const status = getLeadStatus(lead) as (typeof statusOptions)[number]
@@ -3497,16 +3756,61 @@ function buildDashboardAnalytics(
     const serviceType =
       typeof lead.service_type === 'string' && lead.service_type.trim()
         ? lead.service_type.trim()
-        : 'Unknown'
+      : 'Unknown'
     serviceTypeCounts.set(
       serviceType,
       (serviceTypeCounts.get(serviceType) ?? 0) + 1,
+    )
+
+    const leadSource =
+      typeof lead.lead_source === 'string' && lead.lead_source.trim()
+        ? lead.lead_source.trim()
+        : 'Unknown'
+    leadSourceCounts.set(
+      leadSource,
+      (leadSourceCounts.get(leadSource) ?? 0) + 1,
     )
 
     const dateKey = getDateKey(lead.created_at)
     if (dateKey) {
       leadsByDate.set(dateKey, (leadsByDate.get(dateKey) ?? 0) + 1)
     }
+
+    const isBookedLead =
+      getLeadStatus(lead) === 'Booked' || getAppointmentStatus(lead) === 'Booked'
+    if (isBookedLead) {
+      leadSourceBookedCounts.set(
+        leadSource,
+        (leadSourceBookedCounts.get(leadSource) ?? 0) + 1,
+      )
+      const bookedDateKey = getDateKey(lead.booked_at ?? lead.updated_at)
+      if (bookedDateKey) {
+        bookedCallsByDate.set(
+          bookedDateKey,
+          (bookedCallsByDate.get(bookedDateKey) ?? 0) + 1,
+        )
+      }
+    }
+
+    const replyDateKey = getDateKey(lead.replied_at)
+    if (replyDateKey && hasLeadReplied(lead)) {
+      repliesByDate.set(replyDateKey, (repliesByDate.get(replyDateKey) ?? 0) + 1)
+    }
+
+    const smsReplyDateKey = getDateKey(lead.last_sms_reply_at)
+    if (smsReplyDateKey && hasLeadSmsReplied(lead)) {
+      smsRepliesByDate.set(
+        smsReplyDateKey,
+        (smsRepliesByDate.get(smsReplyDateKey) ?? 0) + 1,
+      )
+    }
+
+    const score = getLeadScore(lead)
+    const scoreRange = score >= 75 ? '75-100' : score >= 45 ? '45-74' : '0-44'
+    scoreDistributionCounts.set(
+      scoreRange,
+      (scoreDistributionCounts.get(scoreRange) ?? 0) + 1,
+    )
   })
 
   const total = leads.length
@@ -3516,56 +3820,70 @@ function buildDashboardAnalytics(
       getLeadStatus(lead) === 'Booked' || getAppointmentStatus(lead) === 'Booked',
   ).length
   const closed = statusCounts.Closed
-  const followUpsDueToday = leads.filter(isFollowUpDueToday).length
-  const overdueFollowUps = leads.filter(isFollowUpOverdue).length
-  const upcomingFollowUps = leads.filter(isFollowUpUpcoming).length
   const totalLeadScore = leads.reduce(
     (scoreTotal, lead) => scoreTotal + getLeadScore(lead),
     0,
   )
   const averageLeadScore =
     total > 0 ? Math.round(totalLeadScore / total) : 0
-  const highIntentLeads = leads.filter((lead) => getLeadScore(lead) >= 75).length
   const activeSequences = leads.filter(
     (lead) => getFollowUpSequenceStatus(lead) === 'Active',
-  ).length
-  const pausedSequences = leads.filter(
-    (lead) => getFollowUpSequenceStatus(lead) === 'Paused',
   ).length
   const completedSequences = leads.filter(
     (lead) => getFollowUpSequenceStatus(lead) === 'Completed',
   ).length
   const repliedLeads = leads.filter(hasLeadReplied).length
-  const noReplyLeads = total - repliedLeads
   const smsReplies = leads.filter(hasLeadSmsReplied).length
-  const smsPending = leads.filter(isSmsPending).length
+  const smsSent = leads.filter((lead) => Boolean(lead.last_sms_sent_at)).length
+  const replyRate = calculatePercentage(repliedLeads, total)
+  const smsReplyRate = calculatePercentage(smsReplies, smsSent)
+  const mostCommonServiceType = getTopCountLabel(serviceTypeCounts)
+  const bestLeadSource = getBestLeadSource(leadSourceCounts, leadSourceBookedCounts)
 
   return {
     kpiCards: [
       { label: 'Total Leads', value: total },
-      { label: 'Average Lead Score', value: averageLeadScore },
-      { label: 'High-Intent Leads', value: highIntentLeads },
       { label: 'New Leads', value: statusCounts.New },
-      { label: 'Qualified Leads', value: qualified },
-      { label: 'Booked Leads', value: booked },
-      { label: 'Closed Leads', value: closed },
-      { label: 'Lost Leads', value: statusCounts.Lost },
-      { label: 'Follow-ups Due Today', value: followUpsDueToday },
-      { label: 'Overdue Follow-ups', value: overdueFollowUps },
-      { label: 'Upcoming Follow-ups', value: upcomingFollowUps },
-      { label: 'Replied Leads', value: repliedLeads },
-      { label: 'No Reply Leads', value: noReplyLeads },
-      { label: 'SMS Replies', value: smsReplies },
-      { label: 'SMS Pending', value: smsPending },
+      { label: 'Booked Calls', value: booked },
+      { label: 'Reply Rate', value: `${replyRate}%` },
+      { label: 'SMS Reply Rate', value: `${smsReplyRate}%` },
+      { label: 'Hot Leads', value: temperatureCounts.HOT },
+      { label: 'Warm Leads', value: temperatureCounts.WARM },
+      { label: 'Cold Leads', value: temperatureCounts.COLD },
       { label: 'Active Sequences', value: activeSequences },
-      { label: 'Paused Sequences', value: pausedSequences },
       { label: 'Completed Sequences', value: completedSequences },
     ],
     qualificationRate: calculatePercentage(qualified, total),
     bookingRate: calculatePercentage(booked, total),
     closeRate: calculatePercentage(closed, total),
+    replyRate,
+    smsReplyRate,
+    operationalInsights: [
+      { label: 'Average Lead Score', value: String(averageLeadScore) },
+      { label: 'Most Common Service Type', value: mostCommonServiceType },
+      { label: 'Best Lead Source', value: bestLeadSource },
+      { label: 'Booking Conversion Rate', value: `${calculatePercentage(booked, total)}%` },
+      { label: 'Reply Conversion Rate', value: `${replyRate}%` },
+    ],
     temperatureCounts,
     leadsOverTime: buildLeadsOverTimeData(leadsByDate, timeRange),
+    bookedCallsOverTime: buildCountOverTimeData(
+      bookedCallsByDate,
+      timeRange,
+      'bookedCalls',
+    ),
+    repliesOverTime: buildRepliesOverTimeData(
+      repliesByDate,
+      smsRepliesByDate,
+      timeRange,
+    ),
+    temperatureChartData: temperatureOptions.map((temperature) => ({
+      temperature,
+      leads: temperatureCounts[temperature],
+    })),
+    leadSourceChartData: Array.from(leadSourceCounts.entries())
+      .map(([leadSource, count]) => ({ leadSource, leads: count }))
+      .sort((first, second) => second.leads - first.leads),
     statusChartData: statusOptions.map((status) => ({
       status,
       leads: statusCounts[status],
@@ -3573,6 +3891,9 @@ function buildDashboardAnalytics(
     serviceTypeChartData: Array.from(serviceTypeCounts.entries())
       .map(([serviceType, count]) => ({ serviceType, leads: count }))
       .sort((first, second) => second.leads - first.leads),
+    scoreDistributionData: Array.from(scoreDistributionCounts.entries()).map(
+      ([scoreRange, count]) => ({ scoreRange, leads: count }),
+    ),
   }
 }
 
@@ -3668,6 +3989,110 @@ function buildLeadsOverTimeData(
   })
 }
 
+function buildCountOverTimeData(
+  countsByDate: Map<string, number>,
+  timeRange: TimeRange,
+  valueKey: 'bookedCalls',
+): Array<{ label: string; bookedCalls: number }> {
+  if (timeRange === 'All Time') {
+    return Array.from(countsByDate.entries())
+      .sort(
+        ([firstDate], [secondDate]) =>
+          new Date(`${firstDate}T00:00:00`).getTime() -
+          new Date(`${secondDate}T00:00:00`).getTime(),
+      )
+      .map(([dateKey, count]) => ({
+        label: formatChartDateLabel(dateKey),
+        [valueKey]: count,
+      })) as Array<{ label: string; bookedCalls: number }>
+  }
+
+  const dayCount =
+    timeRange === 'Today' ? 1 : timeRange === 'Last 7 days' ? 8 : 31
+  const startDate = new Date()
+  startDate.setHours(0, 0, 0, 0)
+  startDate.setDate(startDate.getDate() - (dayCount - 1))
+
+  return Array.from({ length: dayCount }, (_item, index) => {
+    const currentDate = new Date(startDate)
+    currentDate.setDate(startDate.getDate() + index)
+    const dateKey = getTorontoDateKey(currentDate)
+
+    return {
+      label: formatChartDateLabel(dateKey),
+      [valueKey]: countsByDate.get(dateKey) ?? 0,
+    }
+  }) as Array<{ label: string; bookedCalls: number }>
+}
+
+function buildRepliesOverTimeData(
+  repliesByDate: Map<string, number>,
+  smsRepliesByDate: Map<string, number>,
+  timeRange: TimeRange,
+) {
+  if (timeRange === 'All Time') {
+    const dateKeys = new Set([
+      ...Array.from(repliesByDate.keys()),
+      ...Array.from(smsRepliesByDate.keys()),
+    ])
+
+    return Array.from(dateKeys)
+      .sort(
+        (firstDate, secondDate) =>
+          new Date(`${firstDate}T00:00:00`).getTime() -
+          new Date(`${secondDate}T00:00:00`).getTime(),
+      )
+      .map((dateKey) => ({
+        label: formatChartDateLabel(dateKey),
+        replies: repliesByDate.get(dateKey) ?? 0,
+        smsReplies: smsRepliesByDate.get(dateKey) ?? 0,
+      }))
+  }
+
+  const dayCount =
+    timeRange === 'Today' ? 1 : timeRange === 'Last 7 days' ? 8 : 31
+  const startDate = new Date()
+  startDate.setHours(0, 0, 0, 0)
+  startDate.setDate(startDate.getDate() - (dayCount - 1))
+
+  return Array.from({ length: dayCount }, (_item, index) => {
+    const currentDate = new Date(startDate)
+    currentDate.setDate(startDate.getDate() + index)
+    const dateKey = getTorontoDateKey(currentDate)
+
+    return {
+      label: formatChartDateLabel(dateKey),
+      replies: repliesByDate.get(dateKey) ?? 0,
+      smsReplies: smsRepliesByDate.get(dateKey) ?? 0,
+    }
+  })
+}
+
+function getTopCountLabel(counts: Map<string, number>) {
+  const [topLabel] = Array.from(counts.entries()).sort(
+    (first, second) => second[1] - first[1],
+  )[0] ?? ['-', 0]
+
+  return topLabel
+}
+
+function getBestLeadSource(
+  leadSourceCounts: Map<string, number>,
+  leadSourceBookedCounts: Map<string, number>,
+) {
+  const [bestSource] = Array.from(leadSourceCounts.entries()).sort(
+    ([firstSource, firstTotal], [secondSource, secondTotal]) => {
+      const firstRate = (leadSourceBookedCounts.get(firstSource) ?? 0) / firstTotal
+      const secondRate =
+        (leadSourceBookedCounts.get(secondSource) ?? 0) / secondTotal
+
+      return secondRate - firstRate || secondTotal - firstTotal
+    },
+  )[0] ?? ['-', 0]
+
+  return bestSource
+}
+
 function calculatePercentage(numerator: number, denominator: number) {
   if (denominator === 0) {
     return 0
@@ -3721,16 +4146,6 @@ function isFollowUpOverdue(lead: Lead) {
     isPendingFollowUp(lead) &&
     followUpDate !== null &&
     followUpDate.getTime() < Date.now()
-  )
-}
-
-function isFollowUpUpcoming(lead: Lead) {
-  const followUpDate = parseSupabaseTimestamp(lead.follow_up_at)
-
-  return (
-    isPendingFollowUp(lead) &&
-    followUpDate !== null &&
-    followUpDate.getTime() > Date.now()
   )
 }
 
