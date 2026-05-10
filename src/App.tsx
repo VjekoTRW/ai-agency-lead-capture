@@ -75,6 +75,10 @@ type Lead = {
   replied_at?: string | null
   reply_status?: string | null
   last_reply_snippet?: string | null
+  sms_reply_status?: string | null
+  last_sms_sent_at?: string | null
+  last_sms_reply_at?: string | null
+  last_sms_message?: string | null
   calendly_url?: string | null
   submission_history?: unknown
   submissions?: unknown
@@ -1836,7 +1840,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-[1880px] w-full text-left text-sm">
+                  <table className="min-w-[1980px] w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
                       <tr>
                         <th className="px-4 py-3">Name</th>
@@ -1853,6 +1857,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                         <th className="px-4 py-3">appointment_status</th>
                         <th className="px-4 py-3">Follow-Up Status</th>
                         <th className="px-4 py-3">Reply Status</th>
+                        <th className="px-4 py-3">SMS Status</th>
                         <th className="px-4 py-3">Next Follow-Up</th>
                         <th className="px-4 py-3">Sequence Status</th>
                         <th className="px-4 py-3">status</th>
@@ -1924,6 +1929,9 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                           </td>
                           <td className="px-4 py-3">
                             <ReplyStatusBadge lead={lead} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <SmsStatusBadge lead={lead} />
                           </td>
                           <td className="px-4 py-3 text-slate-600">
                             {formatTorontoDate(lead.follow_up_at)}
@@ -2276,6 +2284,11 @@ function LeadDetailModal({
               <TemperatureBadge temperature={getLeadTemperature(lead)} />
               {isRepeatLead ? <Badge tone="blue">Repeat lead</Badge> : null}
               {hasLeadReplied(lead) ? <Badge tone="green">Replied</Badge> : null}
+              {hasLeadSmsReplied(lead) ? (
+                <Badge tone="green">SMS replied</Badge>
+              ) : isSmsPending(lead) ? (
+                <Badge tone="yellow">SMS pending</Badge>
+              ) : null}
               <Badge tone="gray">{getLeadStatus(lead)}</Badge>
             </div>
           </div>
@@ -2701,6 +2714,26 @@ function LeadDetailModal({
               <DetailField
                 label="Last reply snippet"
                 value={lead.last_reply_snippet}
+              />
+            </DetailSection>
+
+            <DetailSection title="SMS Tracking">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailBadgeField label="SMS reply status">
+                  <SmsStatusBadge lead={lead} />
+                </DetailBadgeField>
+                <DetailField
+                  label="Last SMS sent"
+                  value={formatTorontoDate(lead.last_sms_sent_at)}
+                />
+                <DetailField
+                  label="Last SMS reply"
+                  value={formatTorontoDate(lead.last_sms_reply_at)}
+                />
+              </div>
+              <DetailField
+                label="Last SMS message"
+                value={lead.last_sms_message}
               />
             </DetailSection>
 
@@ -3189,10 +3222,24 @@ function buildLeadActivityItems(lead: Lead) {
     })
   }
 
+  if (lead.last_sms_sent_at) {
+    activityItems.push({
+      label: 'SMS sent',
+      time: formatTorontoDate(lead.last_sms_sent_at),
+    })
+  }
+
   if (hasLeadReplied(lead)) {
     activityItems.push({
       label: 'Lead replied',
       time: formatTorontoDate(lead.replied_at),
+    })
+  }
+
+  if (hasLeadSmsReplied(lead)) {
+    activityItems.push({
+      label: 'SMS replied',
+      time: formatTorontoDate(lead.last_sms_reply_at),
     })
   }
 
@@ -3272,6 +3319,20 @@ function ReplyStatusBadge({ lead }: { lead: Lead }) {
   }
 
   return <Badge tone="gray">{replyStatus}</Badge>
+}
+
+function SmsStatusBadge({ lead }: { lead: Lead }) {
+  const smsStatus = getSmsReplyStatus(lead)
+
+  if (hasLeadSmsReplied(lead)) {
+    return <Badge tone="green">{smsStatus}</Badge>
+  }
+
+  if (isSmsPending(lead)) {
+    return <Badge tone="yellow">{smsStatus}</Badge>
+  }
+
+  return <Badge tone="gray">{smsStatus}</Badge>
 }
 
 function SequenceStatusBadge({ lead }: { lead: Lead }) {
@@ -3378,6 +3439,8 @@ function buildDashboardAnalytics(
   ).length
   const repliedLeads = leads.filter(hasLeadReplied).length
   const noReplyLeads = total - repliedLeads
+  const smsReplies = leads.filter(hasLeadSmsReplied).length
+  const smsPending = leads.filter(isSmsPending).length
 
   return {
     kpiCards: [
@@ -3394,6 +3457,8 @@ function buildDashboardAnalytics(
       { label: 'Upcoming Follow-ups', value: upcomingFollowUps },
       { label: 'Replied Leads', value: repliedLeads },
       { label: 'No Reply Leads', value: noReplyLeads },
+      { label: 'SMS Replies', value: smsReplies },
+      { label: 'SMS Pending', value: smsPending },
       { label: 'Active Sequences', value: activeSequences },
       { label: 'Paused Sequences', value: pausedSequences },
       { label: 'Completed Sequences', value: completedSequences },
@@ -3680,6 +3745,41 @@ function getReplyStatus(lead: Lead) {
 
 function hasLeadReplied(lead: Lead) {
   return getReplyStatus(lead) === 'Replied'
+}
+
+function getSmsReplyStatus(lead: Lead) {
+  const status =
+    typeof lead.sms_reply_status === 'string' ? lead.sms_reply_status.trim() : ''
+
+  if (status) {
+    return status
+  }
+
+  if (lead.last_sms_reply_at) {
+    return 'Replied'
+  }
+
+  if (lead.last_sms_sent_at) {
+    return 'Pending'
+  }
+
+  return 'No SMS'
+}
+
+function hasLeadSmsReplied(lead: Lead) {
+  const status = getSmsReplyStatus(lead).toLowerCase()
+
+  return status === 'replied' || Boolean(lead.last_sms_reply_at)
+}
+
+function isSmsPending(lead: Lead) {
+  const status = getSmsReplyStatus(lead).toLowerCase()
+
+  return (
+    status === 'pending' ||
+    status === 'sent' ||
+    (Boolean(lead.last_sms_sent_at) && !hasLeadSmsReplied(lead))
+  )
 }
 
 function getFollowUpType(lead: Lead) {
