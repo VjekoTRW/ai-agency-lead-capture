@@ -72,6 +72,9 @@ type Lead = {
   follow_up_type?: string | null
   follow_up_status?: string | null
   follow_up_notes?: string | null
+  replied_at?: string | null
+  reply_status?: string | null
+  last_reply_snippet?: string | null
   calendly_url?: string | null
   submission_history?: unknown
   submissions?: unknown
@@ -1646,7 +1649,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-9">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-8">
               {dashboardAnalytics.kpiCards.map((card) => (
                 <KpiCard
                   key={card.label}
@@ -1833,7 +1836,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-[1760px] w-full text-left text-sm">
+                  <table className="min-w-[1880px] w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
                       <tr>
                         <th className="px-4 py-3">Name</th>
@@ -1849,6 +1852,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                         <th className="px-4 py-3">lead_temperature</th>
                         <th className="px-4 py-3">appointment_status</th>
                         <th className="px-4 py-3">Follow-Up Status</th>
+                        <th className="px-4 py-3">Reply Status</th>
                         <th className="px-4 py-3">Next Follow-Up</th>
                         <th className="px-4 py-3">Sequence Status</th>
                         <th className="px-4 py-3">status</th>
@@ -1918,13 +1922,14 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                           <td className="px-4 py-3">
                             <FollowUpBadge lead={lead} />
                           </td>
+                          <td className="px-4 py-3">
+                            <ReplyStatusBadge lead={lead} />
+                          </td>
                           <td className="px-4 py-3 text-slate-600">
                             {formatTorontoDate(lead.follow_up_at)}
                           </td>
                           <td className="px-4 py-3">
-                            <Badge tone="gray">
-                              {getFollowUpSequenceStatus(lead)}
-                            </Badge>
+                            <SequenceStatusBadge lead={lead} />
                           </td>
                           <td className="px-4 py-3">
                             <select
@@ -2270,6 +2275,7 @@ function LeadDetailModal({
             <div className="mt-3 flex flex-wrap gap-2">
               <TemperatureBadge temperature={getLeadTemperature(lead)} />
               {isRepeatLead ? <Badge tone="blue">Repeat lead</Badge> : null}
+              {hasLeadReplied(lead) ? <Badge tone="green">Replied</Badge> : null}
               <Badge tone="gray">{getLeadStatus(lead)}</Badge>
             </div>
           </div>
@@ -2682,7 +2688,29 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="Reply Tracking">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailBadgeField label="Reply status">
+                  <ReplyStatusBadge lead={lead} />
+                </DetailBadgeField>
+                <DetailField
+                  label="Replied at"
+                  value={formatTorontoDate(lead.replied_at)}
+                />
+              </div>
+              <DetailField
+                label="Last reply snippet"
+                value={lead.last_reply_snippet}
+              />
+            </DetailSection>
+
             <DetailSection title="Follow-Up Sequence">
+              {hasLeadReplied(lead) ? (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+                  Lead replied. Follow-up sequence is paused.
+                </div>
+              ) : null}
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
@@ -2911,7 +2939,11 @@ function LeadDetailModal({
                 />
                 <DetailField
                   label="Sequence status"
-                  value={getFollowUpSequenceStatus(lead)}
+                  value={
+                    hasLeadReplied(lead)
+                      ? `${getFollowUpSequenceStatus(lead)} (paused by reply)`
+                      : getFollowUpSequenceStatus(lead)
+                  }
                 />
                 <DetailField
                   label="Next sequence step"
@@ -3157,6 +3189,13 @@ function buildLeadActivityItems(lead: Lead) {
     })
   }
 
+  if (hasLeadReplied(lead)) {
+    activityItems.push({
+      label: 'Lead replied',
+      time: formatTorontoDate(lead.replied_at),
+    })
+  }
+
   activityItems.push({
     label: `Next sequence step: ${getNextSequenceStep(lead)}`,
     time: formatTorontoDate(lead.updated_at ?? lead.created_at),
@@ -3223,6 +3262,24 @@ function FollowUpBadge({ lead }: { lead: Lead }) {
   }
 
   return <Badge tone="gray">{label}</Badge>
+}
+
+function ReplyStatusBadge({ lead }: { lead: Lead }) {
+  const replyStatus = getReplyStatus(lead)
+
+  if (replyStatus === 'Replied') {
+    return <Badge tone="green">Replied</Badge>
+  }
+
+  return <Badge tone="gray">{replyStatus}</Badge>
+}
+
+function SequenceStatusBadge({ lead }: { lead: Lead }) {
+  if (hasLeadReplied(lead)) {
+    return <Badge tone="yellow">Paused by reply</Badge>
+  }
+
+  return <Badge tone="gray">{getFollowUpSequenceStatus(lead)}</Badge>
 }
 
 function Badge({
@@ -3319,6 +3376,8 @@ function buildDashboardAnalytics(
   const completedSequences = leads.filter(
     (lead) => getFollowUpSequenceStatus(lead) === 'Completed',
   ).length
+  const repliedLeads = leads.filter(hasLeadReplied).length
+  const noReplyLeads = total - repliedLeads
 
   return {
     kpiCards: [
@@ -3333,6 +3392,8 @@ function buildDashboardAnalytics(
       { label: 'Follow-ups Due Today', value: followUpsDueToday },
       { label: 'Overdue Follow-ups', value: overdueFollowUps },
       { label: 'Upcoming Follow-ups', value: upcomingFollowUps },
+      { label: 'Replied Leads', value: repliedLeads },
+      { label: 'No Reply Leads', value: noReplyLeads },
       { label: 'Active Sequences', value: activeSequences },
       { label: 'Paused Sequences', value: pausedSequences },
       { label: 'Completed Sequences', value: completedSequences },
@@ -3609,6 +3670,16 @@ function getValidFollowUpStatus(status: string) {
   )
     ? status
     : 'Not set'
+}
+
+function getReplyStatus(lead: Lead) {
+  const status = typeof lead.reply_status === 'string' ? lead.reply_status.trim() : ''
+
+  return status || 'No reply'
+}
+
+function hasLeadReplied(lead: Lead) {
+  return getReplyStatus(lead) === 'Replied'
 }
 
 function getFollowUpType(lead: Lead) {
