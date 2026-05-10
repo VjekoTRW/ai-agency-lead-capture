@@ -2767,7 +2767,7 @@ function LeadDetailModal({
     <div
       className={`fixed inset-0 z-50 flex bg-slate-950/70 ${
         isFullscreen
-          ? 'items-center justify-center p-3'
+          ? 'items-stretch justify-stretch p-0'
           : 'items-stretch justify-end lg:pl-24'
       }`}
       onClick={onClose}
@@ -2775,7 +2775,7 @@ function LeadDetailModal({
       <div
         className={`flex w-full flex-col overflow-hidden bg-white shadow-2xl ${
           isFullscreen
-            ? 'h-[calc(100vh-1.5rem)] max-w-[min(1600px,calc(100vw-1.5rem))] rounded-lg'
+            ? 'fixed inset-0 h-screen max-h-none w-screen max-w-none rounded-none'
             : 'h-full max-w-5xl'
         }`}
         onClick={(event) => event.stopPropagation()}
