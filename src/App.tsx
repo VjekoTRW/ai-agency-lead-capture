@@ -2133,7 +2133,14 @@ type DashboardAnalytics = {
   closeRate: number
   replyRate: number
   smsReplyRate: number
-  operationalInsights: Array<{ label: string; value: string }>
+  funnelStages: Array<{
+    label: string
+    count: number
+    conversionFromPrevious: number | null
+  }>
+  sequencePerformance: Array<{ label: string; value: number | string }>
+  channelPerformance: Array<{ label: string; value: number | string }>
+  topInsights: Array<{ label: string; value: string }>
   temperatureCounts: Record<(typeof temperatureOptions)[number], number>
   leadsOverTime: Array<{ label: string; leads: number }>
   bookedCallsOverTime: Array<{ label: string; bookedCalls: number }>
@@ -2146,6 +2153,7 @@ type DashboardAnalytics = {
   leadSourceChartData: Array<{ leadSource: string; leads: number }>
   serviceTypeChartData: Array<{ serviceType: string; leads: number }>
   scoreDistributionData: Array<{ scoreRange: string; leads: number }>
+  sequenceStatusChartData: Array<{ status: string; leads: number }>
   statusChartData: Array<{ status: string; leads: number }>
 }
 
@@ -2165,6 +2173,29 @@ function KpiCard({
         <div className="mt-3 h-8 w-16 animate-pulse rounded bg-slate-200" />
       ) : (
         <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
+      )}
+    </div>
+  )
+}
+
+function MetricCard({
+  label,
+  value,
+  loading,
+}: {
+  label: string
+  value: number | string
+  loading: boolean
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      {loading ? (
+        <div className="mt-3 h-7 w-20 animate-pulse rounded bg-slate-200" />
+      ) : (
+        <p className="mt-2 break-words text-2xl font-bold text-slate-950">
+          {value}
+        </p>
       )}
     </div>
   )
@@ -2223,10 +2254,74 @@ function AnalyticsDashboard({
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
-          Operational insights
+          Sales funnel
+        </h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {analytics.funnelStages.map((stage) => (
+            <div
+              key={stage.label}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+            >
+              <p className="text-sm font-medium text-slate-500">{stage.label}</p>
+              {loading ? (
+                <div className="mt-3 h-8 w-16 animate-pulse rounded bg-slate-200" />
+              ) : (
+                <>
+                  <p className="mt-2 text-3xl font-bold text-slate-950">
+                    {stage.count}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    {stage.conversionFromPrevious === null
+                      ? 'Starting stage'
+                      : `${stage.conversionFromPrevious}% from previous`}
+                  </p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+            Sequence performance
+          </h3>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {analytics.sequencePerformance.map((metric) => (
+              <MetricCard
+                key={metric.label}
+                label={metric.label}
+                value={metric.value}
+                loading={loading}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+            SMS vs email performance
+          </h3>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {analytics.channelPerformance.map((metric) => (
+              <MetricCard
+                key={metric.label}
+                label={metric.label}
+                value={metric.value}
+                loading={loading}
+              />
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">
+          Top insights
         </h3>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {analytics.operationalInsights.map((insight) => (
+          {analytics.topInsights.map((insight) => (
             <div
               key={insight.label}
               className="rounded-lg border border-slate-200 bg-slate-50 p-4"
@@ -2247,7 +2342,7 @@ function AnalyticsDashboard({
       </section>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <ChartCard title="Leads Created Over Time" loading={loading}>
+        <ChartCard title="Leads over time" loading={loading}>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={analytics.leadsOverTime}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
@@ -2259,7 +2354,7 @@ function AnalyticsDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Booked Calls Over Time" loading={loading}>
+        <ChartCard title="Bookings over time" loading={loading}>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={analytics.bookedCallsOverTime}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
@@ -2271,7 +2366,7 @@ function AnalyticsDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Replies Over Time" loading={loading}>
+        <ChartCard title="Replies over time" loading={loading}>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={analytics.repliesOverTime}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
@@ -2284,7 +2379,7 @@ function AnalyticsDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Lead Temperature Distribution" loading={loading}>
+        <ChartCard title="Leads by temperature" loading={loading}>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={analytics.temperatureChartData}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
@@ -2309,7 +2404,7 @@ function AnalyticsDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Lead Source Breakdown" loading={loading}>
+        <ChartCard title="Leads by source" loading={loading}>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={analytics.leadSourceChartData}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
@@ -2321,7 +2416,7 @@ function AnalyticsDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Service Type Breakdown" loading={loading}>
+        <ChartCard title="Leads by service type" loading={loading}>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={analytics.serviceTypeChartData}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
@@ -2333,7 +2428,7 @@ function AnalyticsDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Lead Score Distribution" loading={loading}>
+        <ChartCard title="Lead score distribution" loading={loading}>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={analytics.scoreDistributionData}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
@@ -2341,6 +2436,18 @@ function AnalyticsDashboard({
               <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
               <Tooltip />
               <Bar dataKey="leads" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Sequence status distribution" loading={loading}>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={analytics.sequenceStatusChartData}>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis dataKey="status" tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 12 }} tickLine={false} />
+              <Tooltip />
+              <Bar dataKey="leads" fill="#475569" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -3733,12 +3840,21 @@ function buildDashboardAnalytics(
     {} as Record<(typeof temperatureOptions)[number], number>,
   )
   const serviceTypeCounts = new Map<string, number>()
+  const serviceTypeBookedCounts = new Map<string, number>()
   const leadSourceCounts = new Map<string, number>()
   const leadSourceBookedCounts = new Map<string, number>()
+  const sequenceStatusCounts = followUpSequenceStatusOptions.reduce(
+    (counts, status) => ({
+      ...counts,
+      [status]: 0,
+    }),
+    {} as Record<(typeof followUpSequenceStatusOptions)[number], number>,
+  )
   const leadsByDate = new Map<string, number>()
   const bookedCallsByDate = new Map<string, number>()
   const repliesByDate = new Map<string, number>()
   const smsRepliesByDate = new Map<string, number>()
+  const replyDurationsMs: number[] = []
   const scoreDistributionCounts = new Map([
     ['0-44', 0],
     ['45-74', 0],
@@ -3752,6 +3868,11 @@ function buildDashboardAnalytics(
     const temperature =
       getLeadTemperature(lead) as (typeof temperatureOptions)[number]
     temperatureCounts[temperature] += 1
+    const sequenceStatus =
+      getFollowUpSequenceStatus(
+        lead,
+      ) as (typeof followUpSequenceStatusOptions)[number]
+    sequenceStatusCounts[sequenceStatus] += 1
 
     const serviceType =
       typeof lead.service_type === 'string' && lead.service_type.trim()
@@ -3779,6 +3900,10 @@ function buildDashboardAnalytics(
     const isBookedLead =
       getLeadStatus(lead) === 'Booked' || getAppointmentStatus(lead) === 'Booked'
     if (isBookedLead) {
+      serviceTypeBookedCounts.set(
+        serviceType,
+        (serviceTypeBookedCounts.get(serviceType) ?? 0) + 1,
+      )
       leadSourceBookedCounts.set(
         leadSource,
         (leadSourceBookedCounts.get(leadSource) ?? 0) + 1,
@@ -3805,6 +3930,12 @@ function buildDashboardAnalytics(
       )
     }
 
+    const replyDate = getEarliestReplyDate(lead)
+    const createdDate = parseSupabaseTimestamp(lead.created_at)
+    if (replyDate && createdDate && replyDate.getTime() >= createdDate.getTime()) {
+      replyDurationsMs.push(replyDate.getTime() - createdDate.getTime())
+    }
+
     const score = getLeadScore(lead)
     const scoreRange = score >= 75 ? '75-100' : score >= 45 ? '45-74' : '0-44'
     scoreDistributionCounts.set(
@@ -3829,41 +3960,116 @@ function buildDashboardAnalytics(
   const activeSequences = leads.filter(
     (lead) => getFollowUpSequenceStatus(lead) === 'Active',
   ).length
+  const pausedSequences = leads.filter(
+    (lead) => getFollowUpSequenceStatus(lead) === 'Paused',
+  ).length
   const completedSequences = leads.filter(
     (lead) => getFollowUpSequenceStatus(lead) === 'Completed',
   ).length
   const repliedLeads = leads.filter(hasLeadReplied).length
   const smsReplies = leads.filter(hasLeadSmsReplied).length
+  const totalReplies = repliedLeads + smsReplies
+  const repliedStageLeads = leads.filter(hasAnyLeadReply).length
   const smsSent = leads.filter((lead) => Boolean(lead.last_sms_sent_at)).length
-  const replyRate = calculatePercentage(repliedLeads, total)
+  const replyRate = calculatePercentage(repliedStageLeads, total)
+  const emailReplyRate = calculatePercentage(repliedLeads, total)
   const smsReplyRate = calculatePercentage(smsReplies, smsSent)
-  const mostCommonServiceType = getTopCountLabel(serviceTypeCounts)
+  const sequenceLeads = leads.filter(
+    (lead) => getFollowUpSequenceStatus(lead) !== 'Not started',
+  ).length
+  const noReplySequences = leads.filter(
+    (lead) =>
+      getFollowUpSequenceStatus(lead) !== 'Not started' && !hasAnyLeadReply(lead),
+  ).length
+  const sequenceReplies = leads.filter(
+    (lead) =>
+      getFollowUpSequenceStatus(lead) !== 'Not started' && hasAnyLeadReply(lead),
+  ).length
+  const sequenceReplyRate = calculatePercentage(sequenceReplies, sequenceLeads)
+  const bestServiceType = getBestConversionLabel(
+    serviceTypeCounts,
+    serviceTypeBookedCounts,
+  )
   const bestLeadSource = getBestLeadSource(leadSourceCounts, leadSourceBookedCounts)
+  const highestIntentLeadCount = leads.filter((lead) => getLeadScore(lead) >= 75).length
+  const averageReplyMs =
+    replyDurationsMs.length > 0
+      ? Math.round(
+          replyDurationsMs.reduce((totalMs, durationMs) => totalMs + durationMs, 0) /
+            replyDurationsMs.length,
+        )
+      : null
+  const highestConvertingChannel =
+    emailReplyRate === 0 && smsReplyRate === 0
+      ? '-'
+      : emailReplyRate >= smsReplyRate
+        ? `Email (${emailReplyRate}%)`
+        : `SMS (${smsReplyRate}%)`
 
   return {
     kpiCards: [
       { label: 'Total Leads', value: total },
-      { label: 'New Leads', value: statusCounts.New },
-      { label: 'Booked Calls', value: booked },
-      { label: 'Reply Rate', value: `${replyRate}%` },
-      { label: 'SMS Reply Rate', value: `${smsReplyRate}%` },
       { label: 'Hot Leads', value: temperatureCounts.HOT },
-      { label: 'Warm Leads', value: temperatureCounts.WARM },
-      { label: 'Cold Leads', value: temperatureCounts.COLD },
+      { label: 'Booked Calls', value: booked },
+      { label: 'Email Replies', value: repliedLeads },
+      { label: 'SMS Replies', value: smsReplies },
+      { label: 'Total Replies', value: totalReplies },
       { label: 'Active Sequences', value: activeSequences },
+      { label: 'Paused Sequences', value: pausedSequences },
       { label: 'Completed Sequences', value: completedSequences },
+      { label: 'Average Lead Score', value: averageLeadScore },
+      { label: 'Booking Rate', value: `${calculatePercentage(booked, total)}%` },
+      { label: 'Reply Rate', value: `${replyRate}%` },
     ],
     qualificationRate: calculatePercentage(qualified, total),
     bookingRate: calculatePercentage(booked, total),
     closeRate: calculatePercentage(closed, total),
     replyRate,
     smsReplyRate,
-    operationalInsights: [
-      { label: 'Average Lead Score', value: String(averageLeadScore) },
-      { label: 'Most Common Service Type', value: mostCommonServiceType },
-      { label: 'Best Lead Source', value: bestLeadSource },
-      { label: 'Booking Conversion Rate', value: `${calculatePercentage(booked, total)}%` },
-      { label: 'Reply Conversion Rate', value: `${replyRate}%` },
+    funnelStages: [
+      { label: 'Lead Captured', count: total, conversionFromPrevious: null },
+      {
+        label: 'Replied',
+        count: repliedStageLeads,
+        conversionFromPrevious: calculatePercentage(repliedStageLeads, total),
+      },
+      {
+        label: 'Booked',
+        count: booked,
+        conversionFromPrevious: calculatePercentage(booked, repliedStageLeads),
+      },
+      {
+        label: 'Closed',
+        count: closed,
+        conversionFromPrevious: calculatePercentage(closed, booked),
+      },
+    ],
+    sequencePerformance: [
+      { label: 'Active sequences', value: activeSequences },
+      { label: 'Paused sequences', value: pausedSequences },
+      { label: 'Completed sequences', value: completedSequences },
+      { label: 'No reply sequences', value: noReplySequences },
+      { label: 'Reply rate from sequences', value: `${sequenceReplyRate}%` },
+    ],
+    channelPerformance: [
+      { label: 'Email reply count', value: repliedLeads },
+      { label: 'SMS reply count', value: smsReplies },
+      { label: 'Combined reply count', value: totalReplies },
+      { label: 'Email reply rate', value: `${emailReplyRate}%` },
+      { label: 'SMS reply rate', value: `${smsReplyRate}%` },
+    ],
+    topInsights: [
+      { label: 'Best performing service type', value: bestServiceType },
+      { label: 'Best performing lead source', value: bestLeadSource },
+      {
+        label: 'Highest converting follow-up channel',
+        value: highestConvertingChannel,
+      },
+      {
+        label: 'Average time to reply',
+        value: averageReplyMs === null ? '-' : formatDuration(averageReplyMs),
+      },
+      { label: 'Highest intent lead count', value: String(highestIntentLeadCount) },
     ],
     temperatureCounts,
     leadsOverTime: buildLeadsOverTimeData(leadsByDate, timeRange),
@@ -3894,6 +4100,10 @@ function buildDashboardAnalytics(
     scoreDistributionData: Array.from(scoreDistributionCounts.entries()).map(
       ([scoreRange, count]) => ({ scoreRange, leads: count }),
     ),
+    sequenceStatusChartData: followUpSequenceStatusOptions.map((status) => ({
+      status,
+      leads: sequenceStatusCounts[status],
+    })),
   }
 }
 
@@ -4068,29 +4278,66 @@ function buildRepliesOverTimeData(
   })
 }
 
-function getTopCountLabel(counts: Map<string, number>) {
-  const [topLabel] = Array.from(counts.entries()).sort(
-    (first, second) => second[1] - first[1],
-  )[0] ?? ['-', 0]
-
-  return topLabel
-}
-
 function getBestLeadSource(
   leadSourceCounts: Map<string, number>,
   leadSourceBookedCounts: Map<string, number>,
 ) {
-  const [bestSource] = Array.from(leadSourceCounts.entries()).sort(
-    ([firstSource, firstTotal], [secondSource, secondTotal]) => {
-      const firstRate = (leadSourceBookedCounts.get(firstSource) ?? 0) / firstTotal
-      const secondRate =
-        (leadSourceBookedCounts.get(secondSource) ?? 0) / secondTotal
+  return getBestConversionLabel(leadSourceCounts, leadSourceBookedCounts)
+}
+
+function getBestConversionLabel(
+  totalCounts: Map<string, number>,
+  convertedCounts: Map<string, number>,
+) {
+  const [bestLabel, bestTotal] = Array.from(totalCounts.entries()).sort(
+    ([firstLabel, firstTotal], [secondLabel, secondTotal]) => {
+      const firstRate = (convertedCounts.get(firstLabel) ?? 0) / firstTotal
+      const secondRate = (convertedCounts.get(secondLabel) ?? 0) / secondTotal
 
       return secondRate - firstRate || secondTotal - firstTotal
     },
   )[0] ?? ['-', 0]
 
-  return bestSource
+  if (bestLabel === '-' || bestTotal === 0) {
+    return '-'
+  }
+
+  const conversionRate = calculatePercentage(
+    convertedCounts.get(bestLabel) ?? 0,
+    bestTotal,
+  )
+
+  return `${bestLabel} (${conversionRate}%)`
+}
+
+function hasAnyLeadReply(lead: Lead) {
+  return hasLeadReplied(lead) || hasLeadSmsReplied(lead)
+}
+
+function getEarliestReplyDate(lead: Lead) {
+  const replyDates = [lead.replied_at, lead.last_sms_reply_at]
+    .map(parseSupabaseTimestamp)
+    .filter((date): date is Date => date !== null)
+    .sort((firstDate, secondDate) => firstDate.getTime() - secondDate.getTime())
+
+  return replyDates[0] ?? null
+}
+
+function formatDuration(durationMs: number) {
+  const totalMinutes = Math.max(1, Math.round(durationMs / 60000))
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+
+  if (days > 0) {
+    return `${days}d ${hours}h`
+  }
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+
+  return `${minutes}m`
 }
 
 function calculatePercentage(numerator: number, denominator: number) {
