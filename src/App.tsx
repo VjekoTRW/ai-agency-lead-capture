@@ -21,6 +21,7 @@ const N8N_WEBHOOK_URL =
   'https://n8n-xmxo3s5m4sn69amy166p54bn.34.130.94.98.sslip.io/webhook/new-ai-agency-lead'
 const N8N_SEQUENCE_WEBHOOK_URL =
   import.meta.env.VITE_N8N_SEQUENCE_WEBHOOK_URL ?? ''
+const N8N_SMS_WEBHOOK_URL = import.meta.env.VITE_N8N_SMS_WEBHOOK_URL ?? ''
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -1118,11 +1119,13 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
   const [savingSequenceLeadKey, setSavingSequenceLeadKey] = useState<
     string | null
   >(null)
+  const [savingSmsLeadKey, setSavingSmsLeadKey] = useState<string | null>(null)
   const [noteMessage, setNoteMessage] = useState('')
   const [appointmentMessage, setAppointmentMessage] = useState('')
   const [followUpMessage, setFollowUpMessage] = useState('')
   const [aiSummaryMessage, setAiSummaryMessage] = useState('')
   const [sequenceMessage, setSequenceMessage] = useState('')
+  const [smsMessage, setSmsMessage] = useState('')
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -1556,6 +1559,70 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
     setSavingSequenceLeadKey(null)
   }
 
+  const handleSendSmsFollowUp = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    setSavingSmsLeadKey(leadKey)
+    setSmsMessage('')
+
+    if (!N8N_SMS_WEBHOOK_URL) {
+      setSmsMessage('Error: n8n SMS webhook URL is not configured.')
+      setSavingSmsLeadKey(null)
+      return
+    }
+
+    if (!hasLeadPhone(lead)) {
+      setSmsMessage('Error: Lead phone is required to send SMS.')
+      setSavingSmsLeadKey(null)
+      return
+    }
+
+    try {
+      const response = await fetch(N8N_SMS_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildSmsWebhookPayload(lead)),
+      })
+
+      if (!response.ok) {
+        throw new Error(`n8n SMS webhook failed with status ${response.status}`)
+      }
+
+      if (lead.id === undefined || lead.id === null) {
+        throw new Error('Lead id is required to refresh the SMS update.')
+      }
+
+      const { data: refreshedLead, error: smsError } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', lead.id)
+        .single()
+
+      if (smsError) {
+        setSmsMessage(`Error: ${smsError.message}`)
+      } else {
+        const updatedLead = applyLeadScore(refreshedLead as Lead)
+
+        setLeads((currentLeads) =>
+          currentLeads.map((currentLead) =>
+            getLeadKey(currentLead) === leadKey ? updatedLead : currentLead,
+          ),
+        )
+        setSelectedLead((currentLead) =>
+          currentLead && getLeadKey(currentLead) === leadKey
+            ? updatedLead
+            : currentLead,
+        )
+        setSmsMessage('SMS follow-up sent and lead refreshed.')
+      }
+    } catch (error) {
+      setSmsMessage(
+        `Error: ${error instanceof Error ? error.message : 'Could not send SMS follow-up.'}`,
+      )
+    }
+
+    setSavingSmsLeadKey(null)
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     navigate('/login')
@@ -1874,6 +1941,7 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
                             setFollowUpMessage('')
                             setAiSummaryMessage('')
                             setSequenceMessage('')
+                            setSmsMessage('')
                           }}
                           className="cursor-pointer align-top transition hover:bg-slate-50"
                         >
@@ -1979,17 +2047,20 @@ function DashboardPage({ navigate }: { navigate: (path: string) => void }) {
             savingAiSummaryLeadKey === getLeadKey(selectedLead)
           }
           isSavingSequence={savingSequenceLeadKey === getLeadKey(selectedLead)}
+          isSavingSms={savingSmsLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
           appointmentMessage={appointmentMessage}
           followUpMessage={followUpMessage}
           aiSummaryMessage={aiSummaryMessage}
           sequenceMessage={sequenceMessage}
+          smsMessage={smsMessage}
           onSaveNote={handleSaveNote}
           onSaveAppointment={handleSaveAppointment}
           onSaveFollowUp={handleSaveFollowUp}
           onGenerateAiSummary={handleGenerateAiSummary}
           onSaveSequence={handleSaveSequence}
           onSendSequenceStep={handleSendSequenceStep}
+          onSendSmsFollowUp={handleSendSmsFollowUp}
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
@@ -2139,17 +2210,20 @@ function LeadDetailModal({
   isSavingFollowUp,
   isSavingAiSummary,
   isSavingSequence,
+  isSavingSms,
   noteMessage,
   appointmentMessage,
   followUpMessage,
   aiSummaryMessage,
   sequenceMessage,
+  smsMessage,
   onSaveNote,
   onSaveAppointment,
   onSaveFollowUp,
   onGenerateAiSummary,
   onSaveSequence,
   onSendSequenceStep,
+  onSendSmsFollowUp,
   onClose,
 }: {
   lead: Lead
@@ -2158,11 +2232,13 @@ function LeadDetailModal({
   isSavingFollowUp: boolean
   isSavingAiSummary: boolean
   isSavingSequence: boolean
+  isSavingSms: boolean
   noteMessage: string
   appointmentMessage: string
   followUpMessage: string
   aiSummaryMessage: string
   sequenceMessage: string
+  smsMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
   onSaveAppointment: (
     lead: Lead,
@@ -2199,6 +2275,7 @@ function LeadDetailModal({
     },
   ) => Promise<void>
   onSendSequenceStep: (lead: Lead) => Promise<void>
+  onSendSmsFollowUp: (lead: Lead) => Promise<void>
   onClose: () => void
 }) {
   const [notes, setNotes] = useState(lead.notes ?? '')
@@ -2735,6 +2812,27 @@ function LeadDetailModal({
                 label="Last SMS message"
                 value={lead.last_sms_message}
               />
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingSms || !canSendSmsFollowUp(lead)}
+                  onClick={() => onSendSmsFollowUp(lead)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingSms ? 'Sending...' : 'Send SMS follow-up'}
+                </button>
+                {smsMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      smsMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {smsMessage}
+                  </p>
+                ) : null}
+              </div>
             </DetailSection>
 
             <DetailSection title="Follow-Up Sequence">
@@ -3903,6 +4001,14 @@ function canSendCurrentSequenceStep(lead: Lead) {
   )
 }
 
+function hasLeadPhone(lead: Lead) {
+  return typeof lead.phone === 'string' && lead.phone.trim().length > 0
+}
+
+function canSendSmsFollowUp(lead: Lead) {
+  return hasLeadPhone(lead) && Boolean(N8N_SMS_WEBHOOK_URL)
+}
+
 function buildSequenceWebhookPayload(lead: Lead) {
   return {
     lead_id: lead.id ?? null,
@@ -3924,6 +4030,23 @@ function buildSequenceWebhookPayload(lead: Lead) {
     follow_up_notes: lead.follow_up_notes ?? null,
     appointment_status: getAppointmentStatus(lead),
     status: getLeadStatus(lead),
+  }
+}
+
+function buildSmsWebhookPayload(lead: Lead) {
+  return {
+    lead_id: lead.id ?? null,
+    name: lead.name ?? null,
+    phone: lead.phone ?? null,
+    email: lead.email ?? null,
+    business_name: lead.business_name ?? null,
+    service_type: lead.service_type ?? null,
+    booking_link: lead.calendly_url ?? null,
+    calendly_url: lead.calendly_url ?? null,
+    next_sequence_step: getNextSequenceStep(lead),
+    lead_score: getLeadScore(lead),
+    lead_temperature: getLeadTemperature(lead),
+    sms_reply_status: getSmsReplyStatus(lead),
   }
 }
 
