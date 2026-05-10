@@ -60,6 +60,11 @@ type Lead = {
   ai_summary?: string | null
   ai_recommendation?: string | null
   ai_summary_updated_at?: string | null
+  ai_objection_risk?: string | null
+  ai_suggested_response?: string | null
+  ai_close_probability?: number | null
+  ai_next_best_action?: string | null
+  ai_insights_updated_at?: string | null
   follow_up_sequence_status?: string | null
   last_follow_up_sent_at?: string | null
   next_sequence_step?: string | null
@@ -1135,6 +1140,9 @@ function DashboardPage({
   const [savingAiSummaryLeadKey, setSavingAiSummaryLeadKey] = useState<
     string | null
   >(null)
+  const [savingAiInsightsLeadKey, setSavingAiInsightsLeadKey] = useState<
+    string | null
+  >(null)
   const [savingSequenceLeadKey, setSavingSequenceLeadKey] = useState<
     string | null
   >(null)
@@ -1143,6 +1151,7 @@ function DashboardPage({
   const [appointmentMessage, setAppointmentMessage] = useState('')
   const [followUpMessage, setFollowUpMessage] = useState('')
   const [aiSummaryMessage, setAiSummaryMessage] = useState('')
+  const [aiInsightsMessage, setAiInsightsMessage] = useState('')
   const [sequenceMessage, setSequenceMessage] = useState('')
   const [smsMessage, setSmsMessage] = useState('')
 
@@ -1468,6 +1477,49 @@ function DashboardPage({
     }
 
     setSavingAiSummaryLeadKey(null)
+  }
+
+  const handleGenerateAiInsights = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+    const aiInsights = generateAiLeadInsightsPlaceholder(lead)
+    const aiInsightsPayload = {
+      ai_objection_risk: aiInsights.objectionRisk,
+      ai_suggested_response: aiInsights.suggestedResponse,
+      ai_close_probability: aiInsights.closeProbability,
+      ai_next_best_action: aiInsights.nextBestAction,
+      ai_insights_updated_at: updatedAt,
+      updated_at: updatedAt,
+    }
+
+    setSavingAiInsightsLeadKey(leadKey)
+    setAiInsightsMessage('')
+
+    const query = supabase.from('leads').update(aiInsightsPayload)
+    const { error: aiInsightsError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (aiInsightsError) {
+      setAiInsightsMessage(`Error: ${aiInsightsError.message}`)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, ...aiInsightsPayload }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, ...aiInsightsPayload }
+          : currentLead,
+      )
+      setAiInsightsMessage('AI insights saved.')
+    }
+
+    setSavingAiInsightsLeadKey(null)
   }
 
   const handleSaveSequence = async (
@@ -1996,6 +2048,7 @@ function DashboardPage({
                             setAppointmentMessage('')
                             setFollowUpMessage('')
                             setAiSummaryMessage('')
+                            setAiInsightsMessage('')
                             setSequenceMessage('')
                             setSmsMessage('')
                           }}
@@ -2104,18 +2157,23 @@ function DashboardPage({
           isSavingAiSummary={
             savingAiSummaryLeadKey === getLeadKey(selectedLead)
           }
+          isSavingAiInsights={
+            savingAiInsightsLeadKey === getLeadKey(selectedLead)
+          }
           isSavingSequence={savingSequenceLeadKey === getLeadKey(selectedLead)}
           isSavingSms={savingSmsLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
           appointmentMessage={appointmentMessage}
           followUpMessage={followUpMessage}
           aiSummaryMessage={aiSummaryMessage}
+          aiInsightsMessage={aiInsightsMessage}
           sequenceMessage={sequenceMessage}
           smsMessage={smsMessage}
           onSaveNote={handleSaveNote}
           onSaveAppointment={handleSaveAppointment}
           onSaveFollowUp={handleSaveFollowUp}
           onGenerateAiSummary={handleGenerateAiSummary}
+          onGenerateAiInsights={handleGenerateAiInsights}
           onSaveSequence={handleSaveSequence}
           onSendSequenceStep={handleSendSequenceStep}
           onSendSmsFollowUp={handleSendSmsFollowUp}
@@ -2565,18 +2623,21 @@ function LeadDetailModal({
   isSavingAppointment,
   isSavingFollowUp,
   isSavingAiSummary,
+  isSavingAiInsights,
   isSavingSequence,
   isSavingSms,
   noteMessage,
   appointmentMessage,
   followUpMessage,
   aiSummaryMessage,
+  aiInsightsMessage,
   sequenceMessage,
   smsMessage,
   onSaveNote,
   onSaveAppointment,
   onSaveFollowUp,
   onGenerateAiSummary,
+  onGenerateAiInsights,
   onSaveSequence,
   onSendSequenceStep,
   onSendSmsFollowUp,
@@ -2587,12 +2648,14 @@ function LeadDetailModal({
   isSavingAppointment: boolean
   isSavingFollowUp: boolean
   isSavingAiSummary: boolean
+  isSavingAiInsights: boolean
   isSavingSequence: boolean
   isSavingSms: boolean
   noteMessage: string
   appointmentMessage: string
   followUpMessage: string
   aiSummaryMessage: string
+  aiInsightsMessage: string
   sequenceMessage: string
   smsMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
@@ -2620,6 +2683,7 @@ function LeadDetailModal({
     },
   ) => Promise<void>
   onGenerateAiSummary: (lead: Lead) => Promise<void>
+  onGenerateAiInsights: (lead: Lead) => Promise<void>
   onSaveSequence: (
     lead: Lead,
     sequence: {
@@ -3394,6 +3458,59 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="AI Lead Insights">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailField
+                  label="Close Probability"
+                  value={
+                    typeof lead.ai_close_probability === 'number'
+                      ? `${lead.ai_close_probability}%`
+                      : lead.ai_close_probability
+                  }
+                />
+                <DetailField
+                  label="Objection Risk"
+                  value={lead.ai_objection_risk}
+                />
+                <DetailField
+                  label="Next Best Action"
+                  value={lead.ai_next_best_action}
+                />
+                <DetailField
+                  label="Last Updated"
+                  value={formatTorontoDate(lead.ai_insights_updated_at)}
+                />
+              </div>
+              <DetailField
+                label="Suggested Response"
+                value={lead.ai_suggested_response}
+              />
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingAiInsights}
+                  onClick={() => onGenerateAiInsights(lead)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingAiInsights
+                    ? 'Generating...'
+                    : 'Generate AI Insights'}
+                </button>
+                {aiInsightsMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      aiInsightsMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {aiInsightsMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="Pipeline">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
@@ -3661,6 +3778,13 @@ function buildLeadActivityItems(lead: Lead) {
     activityItems.push({
       label: 'AI qualification generated',
       time: formatTorontoDate(lead.ai_summary_updated_at),
+    })
+  }
+
+  if (lead.ai_insights_updated_at) {
+    activityItems.push({
+      label: 'AI insights generated',
+      time: formatTorontoDate(lead.ai_insights_updated_at),
     })
   }
 
@@ -3957,6 +4081,25 @@ function buildDashboardAnalytics(
   )
   const averageLeadScore =
     total > 0 ? Math.round(totalLeadScore / total) : 0
+  const aiInsightLeads = leads.filter(
+    (lead) => typeof lead.ai_close_probability === 'number',
+  )
+  const averageCloseProbability =
+    aiInsightLeads.length > 0
+      ? Math.round(
+          aiInsightLeads.reduce(
+            (probabilityTotal, lead) =>
+              probabilityTotal + (lead.ai_close_probability ?? 0),
+            0,
+          ) / aiInsightLeads.length,
+        )
+      : 0
+  const highCloseProbabilityLeads = leads.filter(
+    (lead) =>
+      typeof lead.ai_close_probability === 'number' &&
+      lead.ai_close_probability >= 70,
+  ).length
+  const leadsWithObjectionRisk = leads.filter(hasAiObjectionRisk).length
   const activeSequences = leads.filter(
     (lead) => getFollowUpSequenceStatus(lead) === 'Active',
   ).length
@@ -4020,6 +4163,9 @@ function buildDashboardAnalytics(
       { label: 'Average Lead Score', value: averageLeadScore },
       { label: 'Booking Rate', value: `${calculatePercentage(booked, total)}%` },
       { label: 'Reply Rate', value: `${replyRate}%` },
+      { label: 'Avg Close Probability', value: `${averageCloseProbability}%` },
+      { label: 'High Close Probability', value: highCloseProbabilityLeads },
+      { label: 'Objection Risk Leads', value: leadsWithObjectionRisk },
     ],
     qualificationRate: calculatePercentage(qualified, total),
     bookingRate: calculatePercentage(booked, total),
@@ -4070,6 +4216,14 @@ function buildDashboardAnalytics(
         value: averageReplyMs === null ? '-' : formatDuration(averageReplyMs),
       },
       { label: 'Highest intent lead count', value: String(highestIntentLeadCount) },
+      {
+        label: 'Average close probability',
+        value: `${averageCloseProbability}%`,
+      },
+      {
+        label: 'Leads with objection risk',
+        value: String(leadsWithObjectionRisk),
+      },
     ],
     temperatureCounts,
     leadsOverTime: buildLeadsOverTimeData(leadsByDate, timeRange),
@@ -4312,6 +4466,14 @@ function getBestConversionLabel(
 
 function hasAnyLeadReply(lead: Lead) {
   return hasLeadReplied(lead) || hasLeadSmsReplied(lead)
+}
+
+function hasAiObjectionRisk(lead: Lead) {
+  return (
+    typeof lead.ai_objection_risk === 'string' &&
+    lead.ai_objection_risk.trim().length > 0 &&
+    lead.ai_objection_risk !== 'No major objection risk detected yet.'
+  )
 }
 
 function getEarliestReplyDate(lead: Lead) {
@@ -4864,6 +5026,77 @@ function generateAiQualificationPlaceholder(lead: Lead) {
         temperature as keyof typeof recommendationByTemperature
       ],
   }
+}
+
+function generateAiLeadInsightsPlaceholder(lead: Lead) {
+  const score = getLeadScore(lead)
+  const temperature = getLeadTemperature(lead)
+
+  if (score >= 75) {
+    return {
+      closeProbability: getRuleBasedCloseProbability(score, 70, 90),
+      objectionRisk: getRuleBasedObjectionRisk(lead),
+      suggestedResponse: getSuggestedResponseByTemperature(temperature),
+      nextBestAction: 'Prioritize immediate follow-up and push toward booking.',
+    }
+  }
+
+  if (score >= 45) {
+    return {
+      closeProbability: getRuleBasedCloseProbability(score, 40, 70),
+      objectionRisk: getRuleBasedObjectionRisk(lead),
+      suggestedResponse: getSuggestedResponseByTemperature(temperature),
+      nextBestAction:
+        'Follow up with a specific audit angle and qualify pain points.',
+    }
+  }
+
+  return {
+    closeProbability: getRuleBasedCloseProbability(score, 10, 40),
+    objectionRisk: getRuleBasedObjectionRisk(lead),
+    suggestedResponse: getSuggestedResponseByTemperature(temperature),
+    nextBestAction: 'Nurture lightly and wait for stronger engagement.',
+  }
+}
+
+function getRuleBasedCloseProbability(score: number, minimum: number, maximum: number) {
+  const boundedScore = Math.min(100, Math.max(0, score))
+  const probability =
+    minimum + Math.round((boundedScore / 100) * (maximum - minimum))
+
+  return Math.min(maximum, Math.max(minimum, probability))
+}
+
+function getRuleBasedObjectionRisk(lead: Lead) {
+  if (lead.response_speed === 'Rarely / Never') {
+    return 'Low urgency / may not view follow-up speed as a priority.'
+  }
+
+  if (getLeadStatus(lead) === 'Lost') {
+    return 'Lead may not see enough immediate value.'
+  }
+
+  if (getAppointmentStatus(lead) === 'No-show') {
+    return 'Commitment risk / may need softer re-engagement.'
+  }
+
+  if (getReplyStatus(lead) === 'No reply' && getSmsReplyStatus(lead) === 'No reply') {
+    return 'Unresponsive so far.'
+  }
+
+  return 'No major objection risk detected yet.'
+}
+
+function getSuggestedResponseByTemperature(temperature: string) {
+  if (temperature === 'HOT') {
+    return 'You look like a strong fit. Want to book a quick audit so we can map the fastest follow-up wins?'
+  }
+
+  if (temperature === 'WARM') {
+    return 'I can share a quick audit angle for where leads may be slipping through. What is the biggest follow-up gap right now?'
+  }
+
+  return 'No rush. I can send a few practical ways to tighten lead follow-up when timing makes sense.'
 }
 
 function getReadableLeadField(value: unknown, fallback: string) {
