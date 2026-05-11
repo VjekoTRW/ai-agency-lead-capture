@@ -32,6 +32,8 @@ const N8N_AI_PRIORITY_WEBHOOK_URL =
   import.meta.env.VITE_N8N_AI_PRIORITY_WEBHOOK_URL ?? ''
 const N8N_CONVERSATION_MEMORY_WEBHOOK_URL =
   import.meta.env.VITE_N8N_CONVERSATION_MEMORY_WEBHOOK_URL ?? ''
+const N8N_AI_FORECAST_WEBHOOK_URL =
+  import.meta.env.VITE_N8N_AI_FORECAST_WEBHOOK_URL ?? ''
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -91,6 +93,11 @@ type Lead = {
   ai_conversation_summary?: string | null
   ai_last_interaction_summary?: string | null
   ai_conversation_memory_updated_at?: string | null
+  ai_forecast_summary?: string | null
+  ai_forecast_close_timeline?: string | null
+  ai_forecast_revenue_opportunity?: string | null
+  ai_forecast_risk_level?: string | null
+  ai_forecast_updated_at?: string | null
   follow_up_sequence_status?: string | null
   last_follow_up_sent_at?: string | null
   next_sequence_step?: string | null
@@ -1212,6 +1219,9 @@ function DashboardPage({
   >(null)
   const [savingConversationMemoryLeadKey, setSavingConversationMemoryLeadKey] =
     useState<string | null>(null)
+  const [savingForecastLeadKey, setSavingForecastLeadKey] = useState<
+    string | null
+  >(null)
   const [savingSequenceLeadKey, setSavingSequenceLeadKey] = useState<
     string | null
   >(null)
@@ -1225,6 +1235,7 @@ function DashboardPage({
   const [callPrepMessage, setCallPrepMessage] = useState('')
   const [aiFollowUpMessage, setAiFollowUpMessage] = useState('')
   const [conversationMemoryMessage, setConversationMemoryMessage] = useState('')
+  const [forecastMessage, setForecastMessage] = useState('')
   const [sequenceMessage, setSequenceMessage] = useState('')
   const [smsMessage, setSmsMessage] = useState('')
   const [priorityMessage, setPriorityMessage] = useState('')
@@ -1753,6 +1764,54 @@ function DashboardPage({
     setSavingConversationMemoryLeadKey(null)
   }
 
+  const handleGenerateForecast = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+
+    setSavingForecastLeadKey(leadKey)
+    setForecastMessage('')
+
+    try {
+      const forecastPayload = N8N_AI_FORECAST_WEBHOOK_URL
+        ? await requestForecastFromWebhook(lead, updatedAt)
+        : buildRuleBasedForecastPayload(lead, updatedAt)
+
+      const query = supabase.from('leads').update(forecastPayload)
+      const { error: forecastError } =
+        lead.id !== undefined && lead.id !== null
+          ? await query.eq('id', lead.id)
+          : await query.eq('email', lead.email)
+
+      if (forecastError) {
+        setForecastMessage(`Error: ${forecastError.message}`)
+      } else {
+        const updatedLead = await refetchUpdatedLead(lead, forecastPayload)
+
+        setLeads((currentLeads) =>
+          currentLeads.map((currentLead) =>
+            getLeadKey(currentLead) === leadKey ? updatedLead : currentLead,
+          ),
+        )
+        setSelectedLead((currentLead) =>
+          currentLead && getLeadKey(currentLead) === leadKey
+            ? updatedLead
+            : currentLead,
+        )
+        setForecastMessage(
+          N8N_AI_FORECAST_WEBHOOK_URL
+            ? 'AI forecast generated and saved.'
+            : 'AI forecast saved with rule-based fallback.',
+        )
+      }
+    } catch (error) {
+      setForecastMessage(
+        `Error: ${error instanceof Error ? error.message : 'Could not generate forecast.'}`,
+      )
+    }
+
+    setSavingForecastLeadKey(null)
+  }
+
   const handleSaveSequence = async (
     lead: Lead,
     sequence: {
@@ -1992,6 +2051,7 @@ function DashboardPage({
     setCallPrepMessage('')
     setAiFollowUpMessage('')
     setConversationMemoryMessage('')
+    setForecastMessage('')
     setSequenceMessage('')
     setSmsMessage('')
     setPriorityMessage('')
@@ -2473,6 +2533,7 @@ function DashboardPage({
           isSavingConversationMemory={
             savingConversationMemoryLeadKey === getLeadKey(selectedLead)
           }
+          isSavingForecast={savingForecastLeadKey === getLeadKey(selectedLead)}
           isSavingSequence={savingSequenceLeadKey === getLeadKey(selectedLead)}
           isSavingSms={savingSmsLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
@@ -2483,6 +2544,7 @@ function DashboardPage({
           callPrepMessage={callPrepMessage}
           aiFollowUpMessage={aiFollowUpMessage}
           conversationMemoryMessage={conversationMemoryMessage}
+          forecastMessage={forecastMessage}
           sequenceMessage={sequenceMessage}
           smsMessage={smsMessage}
           onSaveNote={handleSaveNote}
@@ -2493,6 +2555,7 @@ function DashboardPage({
           onGenerateCallPrep={handleGenerateCallPrep}
           onGenerateAiFollowUp={handleGenerateAiFollowUp}
           onGenerateConversationMemory={handleGenerateConversationMemory}
+          onGenerateForecast={handleGenerateForecast}
           onSaveSequence={handleSaveSequence}
           onSendSequenceStep={handleSendSequenceStep}
           onSendSmsFollowUp={handleSendSmsFollowUp}
@@ -3092,6 +3155,7 @@ function LeadDetailModal({
   isSavingCallPrep,
   isSavingAiFollowUp,
   isSavingConversationMemory,
+  isSavingForecast,
   isSavingSequence,
   isSavingSms,
   noteMessage,
@@ -3102,6 +3166,7 @@ function LeadDetailModal({
   callPrepMessage,
   aiFollowUpMessage,
   conversationMemoryMessage,
+  forecastMessage,
   sequenceMessage,
   smsMessage,
   onSaveNote,
@@ -3112,6 +3177,7 @@ function LeadDetailModal({
   onGenerateCallPrep,
   onGenerateAiFollowUp,
   onGenerateConversationMemory,
+  onGenerateForecast,
   onSaveSequence,
   onSendSequenceStep,
   onSendSmsFollowUp,
@@ -3126,6 +3192,7 @@ function LeadDetailModal({
   isSavingCallPrep: boolean
   isSavingAiFollowUp: boolean
   isSavingConversationMemory: boolean
+  isSavingForecast: boolean
   isSavingSequence: boolean
   isSavingSms: boolean
   noteMessage: string
@@ -3136,6 +3203,7 @@ function LeadDetailModal({
   callPrepMessage: string
   aiFollowUpMessage: string
   conversationMemoryMessage: string
+  forecastMessage: string
   sequenceMessage: string
   smsMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
@@ -3167,6 +3235,7 @@ function LeadDetailModal({
   onGenerateCallPrep: (lead: Lead) => Promise<void>
   onGenerateAiFollowUp: (lead: Lead, tone: string) => Promise<void>
   onGenerateConversationMemory: (lead: Lead) => Promise<void>
+  onGenerateForecast: (lead: Lead) => Promise<void>
   onSaveSequence: (
     lead: Lead,
     sequence: {
@@ -4199,6 +4268,54 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="AI Forecasting">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailField
+                  label="Estimated Close Timeline"
+                  value={lead.ai_forecast_close_timeline}
+                />
+                <DetailField
+                  label="Revenue Opportunity"
+                  value={lead.ai_forecast_revenue_opportunity}
+                />
+                <DetailField
+                  label="Risk Level"
+                  value={lead.ai_forecast_risk_level}
+                />
+                <DetailField
+                  label="Last Updated"
+                  value={formatTorontoDate(lead.ai_forecast_updated_at)}
+                />
+              </div>
+
+              <DetailField
+                label="Forecast Summary"
+                value={lead.ai_forecast_summary}
+              />
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingForecast}
+                  onClick={() => onGenerateForecast(lead)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingForecast ? 'Generating...' : 'Generate Forecast'}
+                </button>
+                {forecastMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      forecastMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {forecastMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="Pipeline">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
@@ -4506,6 +4623,13 @@ function buildLeadActivityItems(lead: Lead) {
     activityItems.push({
       label: 'AI conversation memory generated',
       time: formatTorontoDate(lead.ai_conversation_memory_updated_at),
+    })
+  }
+
+  if (lead.ai_forecast_updated_at) {
+    activityItems.push({
+      label: 'AI forecast generated',
+      time: formatTorontoDate(lead.ai_forecast_updated_at),
     })
   }
 
@@ -5009,6 +5133,33 @@ function isStaleLead(lead: Lead) {
   )
 }
 
+function isHighForecastOpportunityLead(lead: Lead) {
+  const opportunity =
+    typeof lead.ai_forecast_revenue_opportunity === 'string'
+      ? lead.ai_forecast_revenue_opportunity.toLowerCase()
+      : ''
+
+  return (
+    opportunity.includes('high') ||
+    (getPriorityCloseProbability(lead) >= 70 &&
+      getLeadStatus(lead) !== 'Closed' &&
+      getLeadStatus(lead) !== 'Lost')
+  )
+}
+
+function isHighRiskForecastLead(lead: Lead) {
+  const riskLevel =
+    typeof lead.ai_forecast_risk_level === 'string'
+      ? lead.ai_forecast_risk_level.toLowerCase()
+      : ''
+
+  return (
+    riskLevel.includes('high') ||
+    getLeadStatus(lead) === 'Lost' ||
+    getAppointmentStatus(lead) === 'No-show'
+  )
+}
+
 function buildDashboardAnalytics(
   leads: Lead[],
   timeRange: TimeRange,
@@ -5163,6 +5314,10 @@ function buildDashboardAnalytics(
       typeof lead.ai_close_probability === 'number' &&
       lead.ai_close_probability >= 70,
   ).length
+  const highForecastOpportunityLeads = leads.filter(
+    isHighForecastOpportunityLead,
+  ).length
+  const highRiskLeads = leads.filter(isHighRiskForecastLead).length
   const leadsWithObjectionRisk = leads.filter(hasAiObjectionRisk).length
   const activeSequences = leads.filter(
     (lead) => getFollowUpSequenceStatus(lead) === 'Active',
@@ -5228,6 +5383,8 @@ function buildDashboardAnalytics(
       { label: 'Booking Rate', value: `${calculatePercentage(booked, total)}%` },
       { label: 'Reply Rate', value: `${replyRate}%` },
       { label: 'Avg Close Probability', value: `${averageCloseProbability}%` },
+      { label: 'High Forecast Opportunity Leads', value: highForecastOpportunityLeads },
+      { label: 'High Risk Leads', value: highRiskLeads },
       { label: 'High Close Probability', value: highCloseProbabilityLeads },
       { label: 'Objection Risk Leads', value: leadsWithObjectionRisk },
     ],
@@ -6072,6 +6229,60 @@ function buildConversationMemoryWebhookPayload(lead: Lead) {
   }
 }
 
+async function requestForecastFromWebhook(lead: Lead, updatedAt: string) {
+  const response = await fetch(N8N_AI_FORECAST_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildForecastWebhookPayload(lead)),
+  })
+
+  if (!response.ok) {
+    throw new Error(`n8n AI forecast webhook failed with status ${response.status}`)
+  }
+
+  const responseJson = (await response.json()) as unknown
+  const forecastResponse = parseForecastWebhookResponse(responseJson)
+
+  return {
+    ...forecastResponse,
+    ai_forecast_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildRuleBasedForecastPayload(lead: Lead, updatedAt: string) {
+  const forecast = generateForecastPlaceholder(lead)
+
+  return {
+    ai_forecast_summary: forecast.summary,
+    ai_forecast_close_timeline: forecast.closeTimeline,
+    ai_forecast_revenue_opportunity: forecast.revenueOpportunity,
+    ai_forecast_risk_level: forecast.riskLevel,
+    ai_forecast_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildForecastWebhookPayload(lead: Lead) {
+  return {
+    ...buildConversationMemoryWebhookPayload(lead),
+    id: lead.id ?? null,
+    email: lead.email ?? null,
+    phone: lead.phone ?? null,
+    lead_source: lead.lead_source ?? null,
+    response_speed: lead.response_speed ?? null,
+    lead_score: getLeadScore(lead),
+    lead_temperature: getLeadTemperature(lead),
+    ai_close_probability: lead.ai_close_probability ?? null,
+    ai_priority_rank: lead.ai_priority_rank ?? null,
+    ai_priority_reason: lead.ai_priority_reason ?? null,
+    ai_conversation_summary: lead.ai_conversation_summary ?? null,
+    ai_last_interaction_summary: lead.ai_last_interaction_summary ?? null,
+    booked_at: lead.booked_at ?? null,
+    follow_up_at: lead.follow_up_at ?? null,
+  }
+}
+
 async function requestAiInsightsFromWebhook(lead: Lead, updatedAt: string) {
   const response = await fetch(N8N_AI_INSIGHTS_WEBHOOK_URL, {
     method: 'POST',
@@ -6256,6 +6467,34 @@ function parseConversationMemoryWebhookResponse(responseJson: unknown) {
     ai_conversation_memory: response.ai_conversation_memory,
     ai_conversation_summary: response.ai_conversation_summary,
     ai_last_interaction_summary: response.ai_last_interaction_summary,
+  }
+}
+
+function parseForecastWebhookResponse(responseJson: unknown) {
+  if (
+    typeof responseJson !== 'object' ||
+    responseJson === null ||
+    Array.isArray(responseJson)
+  ) {
+    throw new Error('n8n AI forecast webhook returned invalid JSON.')
+  }
+
+  const response = responseJson as Record<string, unknown>
+
+  if (
+    typeof response.ai_forecast_summary !== 'string' ||
+    typeof response.ai_forecast_close_timeline !== 'string' ||
+    typeof response.ai_forecast_revenue_opportunity !== 'string' ||
+    typeof response.ai_forecast_risk_level !== 'string'
+  ) {
+    throw new Error('n8n AI forecast webhook response is missing required fields.')
+  }
+
+  return {
+    ai_forecast_summary: response.ai_forecast_summary,
+    ai_forecast_close_timeline: response.ai_forecast_close_timeline,
+    ai_forecast_revenue_opportunity: response.ai_forecast_revenue_opportunity,
+    ai_forecast_risk_level: response.ai_forecast_risk_level,
   }
 }
 
@@ -6576,6 +6815,77 @@ function generateConversationMemoryPlaceholder(lead: Lead) {
     )}`,
     lastInteractionSummary: latestInteraction,
   }
+}
+
+function generateForecastPlaceholder(lead: Lead) {
+  const closeProbability = getPriorityCloseProbability(lead)
+  const temperature = getLeadTemperature(lead)
+  const businessName = getReadableLeadField(lead.business_name, 'this lead')
+  const nextBestAction = getPriorityNextBestAction(lead)
+  const riskLevel = getRuleBasedForecastRiskLevel(lead, closeProbability)
+
+  return {
+    summary: `${businessName} is forecast as a ${temperature} opportunity with an estimated ${closeProbability}% close probability. ${nextBestAction}`,
+    closeTimeline: getRuleBasedCloseTimeline(lead, closeProbability),
+    revenueOpportunity: getRuleBasedRevenueOpportunity(lead, closeProbability),
+    riskLevel,
+  }
+}
+
+function getRuleBasedCloseTimeline(lead: Lead, closeProbability: number) {
+  if (getLeadStatus(lead) === 'Closed') {
+    return 'Already closed'
+  }
+
+  if (getLeadStatus(lead) === 'Lost') {
+    return 'Unlikely without re-engagement'
+  }
+
+  if (getAppointmentStatus(lead) === 'Booked') {
+    return '0-7 days'
+  }
+
+  if (hasAnyLeadReply(lead) || closeProbability >= 75) {
+    return '7-14 days'
+  }
+
+  if (closeProbability >= 45) {
+    return '14-30 days'
+  }
+
+  return '30+ days'
+}
+
+function getRuleBasedRevenueOpportunity(lead: Lead, closeProbability: number) {
+  if (getLeadStatus(lead) === 'Closed') {
+    return 'Closed opportunity'
+  }
+
+  if (getLeadStatus(lead) === 'Lost') {
+    return 'Low unless re-engaged'
+  }
+
+  if (closeProbability >= 75 || getLeadTemperature(lead) === 'HOT') {
+    return 'High'
+  }
+
+  if (closeProbability >= 45 || getLeadTemperature(lead) === 'WARM') {
+    return 'Medium'
+  }
+
+  return 'Low'
+}
+
+function getRuleBasedForecastRiskLevel(lead: Lead, closeProbability: number) {
+  if (getLeadStatus(lead) === 'Lost' || getAppointmentStatus(lead) === 'No-show') {
+    return 'High'
+  }
+
+  if (isFollowUpOverdue(lead) || closeProbability < 45) {
+    return 'Medium'
+  }
+
+  return 'Low'
 }
 
 function getLatestInteractionSummary(lead: Lead) {
