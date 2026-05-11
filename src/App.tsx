@@ -30,6 +30,8 @@ const N8N_AI_FOLLOWUP_WEBHOOK_URL =
   import.meta.env.VITE_N8N_AI_FOLLOWUP_WEBHOOK_URL ?? ''
 const N8N_AI_PRIORITY_WEBHOOK_URL =
   import.meta.env.VITE_N8N_AI_PRIORITY_WEBHOOK_URL ?? ''
+const N8N_CONVERSATION_MEMORY_WEBHOOK_URL =
+  import.meta.env.VITE_N8N_CONVERSATION_MEMORY_WEBHOOK_URL ?? ''
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -85,10 +87,15 @@ type Lead = {
   ai_priority_rank?: number | null
   ai_priority_reason?: string | null
   ai_priority_updated_at?: string | null
+  ai_conversation_memory?: string | null
+  ai_conversation_summary?: string | null
+  ai_last_interaction_summary?: string | null
+  ai_conversation_memory_updated_at?: string | null
   follow_up_sequence_status?: string | null
   last_follow_up_sent_at?: string | null
   next_sequence_step?: string | null
   follow_up_message_log?: string | null
+  follow_up_sms_log?: string | null
   status?: string | null
   notes?: string | null
   booked_at?: string | null
@@ -1203,6 +1210,8 @@ function DashboardPage({
   const [savingAiFollowUpLeadKey, setSavingAiFollowUpLeadKey] = useState<
     string | null
   >(null)
+  const [savingConversationMemoryLeadKey, setSavingConversationMemoryLeadKey] =
+    useState<string | null>(null)
   const [savingSequenceLeadKey, setSavingSequenceLeadKey] = useState<
     string | null
   >(null)
@@ -1215,6 +1224,7 @@ function DashboardPage({
   const [aiInsightsMessage, setAiInsightsMessage] = useState('')
   const [callPrepMessage, setCallPrepMessage] = useState('')
   const [aiFollowUpMessage, setAiFollowUpMessage] = useState('')
+  const [conversationMemoryMessage, setConversationMemoryMessage] = useState('')
   const [sequenceMessage, setSequenceMessage] = useState('')
   const [smsMessage, setSmsMessage] = useState('')
   const [priorityMessage, setPriorityMessage] = useState('')
@@ -1692,6 +1702,57 @@ function DashboardPage({
     setSavingAiFollowUpLeadKey(null)
   }
 
+  const handleGenerateConversationMemory = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+
+    setSavingConversationMemoryLeadKey(leadKey)
+    setConversationMemoryMessage('')
+
+    try {
+      const conversationMemoryPayload = N8N_CONVERSATION_MEMORY_WEBHOOK_URL
+        ? await requestConversationMemoryFromWebhook(lead, updatedAt)
+        : buildRuleBasedConversationMemoryPayload(lead, updatedAt)
+
+      const query = supabase.from('leads').update(conversationMemoryPayload)
+      const { error: conversationMemoryError } =
+        lead.id !== undefined && lead.id !== null
+          ? await query.eq('id', lead.id)
+          : await query.eq('email', lead.email)
+
+      if (conversationMemoryError) {
+        setConversationMemoryMessage(`Error: ${conversationMemoryError.message}`)
+      } else {
+        const updatedLead = await refetchUpdatedLead(
+          lead,
+          conversationMemoryPayload,
+        )
+
+        setLeads((currentLeads) =>
+          currentLeads.map((currentLead) =>
+            getLeadKey(currentLead) === leadKey ? updatedLead : currentLead,
+          ),
+        )
+        setSelectedLead((currentLead) =>
+          currentLead && getLeadKey(currentLead) === leadKey
+            ? updatedLead
+            : currentLead,
+        )
+        setConversationMemoryMessage(
+          N8N_CONVERSATION_MEMORY_WEBHOOK_URL
+            ? 'AI conversation memory generated and saved.'
+            : 'AI conversation memory saved with rule-based fallback.',
+        )
+      }
+    } catch (error) {
+      setConversationMemoryMessage(
+        `Error: ${error instanceof Error ? error.message : 'Could not generate conversation memory.'}`,
+      )
+    }
+
+    setSavingConversationMemoryLeadKey(null)
+  }
+
   const handleSaveSequence = async (
     lead: Lead,
     sequence: {
@@ -1930,6 +1991,7 @@ function DashboardPage({
     setAiInsightsMessage('')
     setCallPrepMessage('')
     setAiFollowUpMessage('')
+    setConversationMemoryMessage('')
     setSequenceMessage('')
     setSmsMessage('')
     setPriorityMessage('')
@@ -2408,6 +2470,9 @@ function DashboardPage({
           isSavingAiFollowUp={
             savingAiFollowUpLeadKey === getLeadKey(selectedLead)
           }
+          isSavingConversationMemory={
+            savingConversationMemoryLeadKey === getLeadKey(selectedLead)
+          }
           isSavingSequence={savingSequenceLeadKey === getLeadKey(selectedLead)}
           isSavingSms={savingSmsLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
@@ -2417,6 +2482,7 @@ function DashboardPage({
           aiInsightsMessage={aiInsightsMessage}
           callPrepMessage={callPrepMessage}
           aiFollowUpMessage={aiFollowUpMessage}
+          conversationMemoryMessage={conversationMemoryMessage}
           sequenceMessage={sequenceMessage}
           smsMessage={smsMessage}
           onSaveNote={handleSaveNote}
@@ -2426,6 +2492,7 @@ function DashboardPage({
           onGenerateAiInsights={handleGenerateAiInsights}
           onGenerateCallPrep={handleGenerateCallPrep}
           onGenerateAiFollowUp={handleGenerateAiFollowUp}
+          onGenerateConversationMemory={handleGenerateConversationMemory}
           onSaveSequence={handleSaveSequence}
           onSendSequenceStep={handleSendSequenceStep}
           onSendSmsFollowUp={handleSendSmsFollowUp}
@@ -3024,6 +3091,7 @@ function LeadDetailModal({
   isSavingAiInsights,
   isSavingCallPrep,
   isSavingAiFollowUp,
+  isSavingConversationMemory,
   isSavingSequence,
   isSavingSms,
   noteMessage,
@@ -3033,6 +3101,7 @@ function LeadDetailModal({
   aiInsightsMessage,
   callPrepMessage,
   aiFollowUpMessage,
+  conversationMemoryMessage,
   sequenceMessage,
   smsMessage,
   onSaveNote,
@@ -3042,6 +3111,7 @@ function LeadDetailModal({
   onGenerateAiInsights,
   onGenerateCallPrep,
   onGenerateAiFollowUp,
+  onGenerateConversationMemory,
   onSaveSequence,
   onSendSequenceStep,
   onSendSmsFollowUp,
@@ -3055,6 +3125,7 @@ function LeadDetailModal({
   isSavingAiInsights: boolean
   isSavingCallPrep: boolean
   isSavingAiFollowUp: boolean
+  isSavingConversationMemory: boolean
   isSavingSequence: boolean
   isSavingSms: boolean
   noteMessage: string
@@ -3064,6 +3135,7 @@ function LeadDetailModal({
   aiInsightsMessage: string
   callPrepMessage: string
   aiFollowUpMessage: string
+  conversationMemoryMessage: string
   sequenceMessage: string
   smsMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
@@ -3094,6 +3166,7 @@ function LeadDetailModal({
   onGenerateAiInsights: (lead: Lead) => Promise<void>
   onGenerateCallPrep: (lead: Lead) => Promise<void>
   onGenerateAiFollowUp: (lead: Lead, tone: string) => Promise<void>
+  onGenerateConversationMemory: (lead: Lead) => Promise<void>
   onSaveSequence: (
     lead: Lead,
     sequence: {
@@ -4078,6 +4151,54 @@ function LeadDetailModal({
               ) : null}
             </DetailSection>
 
+            <DetailSection title="AI Conversation Memory">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailField
+                  label="Last Updated"
+                  value={formatTorontoDate(
+                    lead.ai_conversation_memory_updated_at,
+                  )}
+                />
+              </div>
+
+              <DetailField
+                label="Conversation Memory"
+                value={lead.ai_conversation_memory}
+              />
+              <DetailField
+                label="Conversation Summary"
+                value={lead.ai_conversation_summary}
+              />
+              <DetailField
+                label="Last Interaction Summary"
+                value={lead.ai_last_interaction_summary}
+              />
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingConversationMemory}
+                  onClick={() => onGenerateConversationMemory(lead)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingConversationMemory
+                    ? 'Generating...'
+                    : 'Generate Conversation Memory'}
+                </button>
+                {conversationMemoryMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      conversationMemoryMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {conversationMemoryMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="Pipeline">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
@@ -4378,6 +4499,13 @@ function buildLeadActivityItems(lead: Lead) {
     activityItems.push({
       label: 'AI follow-up generated',
       time: formatTorontoDate(lead.ai_followup_updated_at),
+    })
+  }
+
+  if (lead.ai_conversation_memory_updated_at) {
+    activityItems.push({
+      label: 'AI conversation memory generated',
+      time: formatTorontoDate(lead.ai_conversation_memory_updated_at),
     })
   }
 
@@ -5877,6 +6005,73 @@ function buildAiFollowUpWebhookPayload(lead: Lead, tone: string) {
   }
 }
 
+async function requestConversationMemoryFromWebhook(
+  lead: Lead,
+  updatedAt: string,
+) {
+  const response = await fetch(N8N_CONVERSATION_MEMORY_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildConversationMemoryWebhookPayload(lead)),
+  })
+
+  if (!response.ok) {
+    throw new Error(
+      `n8n conversation memory webhook failed with status ${response.status}`,
+    )
+  }
+
+  const responseJson = (await response.json()) as unknown
+  const conversationMemoryResponse =
+    parseConversationMemoryWebhookResponse(responseJson)
+
+  return {
+    ...conversationMemoryResponse,
+    ai_conversation_memory_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildRuleBasedConversationMemoryPayload(lead: Lead, updatedAt: string) {
+  const conversationMemory = generateConversationMemoryPlaceholder(lead)
+
+  return {
+    ai_conversation_memory: conversationMemory.conversationMemory,
+    ai_conversation_summary: conversationMemory.conversationSummary,
+    ai_last_interaction_summary: conversationMemory.lastInteractionSummary,
+    ai_conversation_memory_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildConversationMemoryWebhookPayload(lead: Lead) {
+  return {
+    name: lead.name ?? null,
+    business_name: lead.business_name ?? null,
+    service_type: lead.service_type ?? null,
+    status: getLeadStatus(lead),
+    notes: lead.notes ?? null,
+    reply_status: getReplyStatus(lead),
+    last_reply_snippet: lead.last_reply_snippet ?? null,
+    sms_reply_status: getSmsReplyStatus(lead),
+    last_sms_message: lead.last_sms_message ?? null,
+    follow_up_message_log: lead.follow_up_message_log ?? null,
+    follow_up_sms_log: lead.follow_up_sms_log ?? null,
+    appointment_status: getAppointmentStatus(lead),
+    appointment_notes: lead.appointment_notes ?? null,
+    follow_up_sequence_status: getFollowUpSequenceStatus(lead),
+    ai_summary: lead.ai_summary ?? null,
+    ai_recommendation: lead.ai_recommendation ?? null,
+    ai_objection_risk: lead.ai_objection_risk ?? null,
+    ai_next_best_action: lead.ai_next_best_action ?? null,
+    ai_call_opening_angle: lead.ai_call_opening_angle ?? null,
+    ai_likely_objections: lead.ai_likely_objections ?? null,
+    ai_discovery_questions: lead.ai_discovery_questions ?? null,
+    ai_generated_email_followup: lead.ai_generated_email_followup ?? null,
+    ai_generated_sms_followup: lead.ai_generated_sms_followup ?? null,
+  }
+}
+
 async function requestAiInsightsFromWebhook(lead: Lead, updatedAt: string) {
   const response = await fetch(N8N_AI_INSIGHTS_WEBHOOK_URL, {
     method: 'POST',
@@ -6033,6 +6228,34 @@ function parseAiFollowUpWebhookResponse(responseJson: unknown) {
     ai_generated_email_followup: response.ai_generated_email_followup,
     ai_generated_sms_followup: response.ai_generated_sms_followup,
     ai_followup_tone: getValidAiFollowUpTone(response.ai_followup_tone),
+  }
+}
+
+function parseConversationMemoryWebhookResponse(responseJson: unknown) {
+  if (
+    typeof responseJson !== 'object' ||
+    responseJson === null ||
+    Array.isArray(responseJson)
+  ) {
+    throw new Error('n8n conversation memory webhook returned invalid JSON.')
+  }
+
+  const response = responseJson as Record<string, unknown>
+
+  if (
+    typeof response.ai_conversation_memory !== 'string' ||
+    typeof response.ai_conversation_summary !== 'string' ||
+    typeof response.ai_last_interaction_summary !== 'string'
+  ) {
+    throw new Error(
+      'n8n conversation memory webhook response is missing required fields.',
+    )
+  }
+
+  return {
+    ai_conversation_memory: response.ai_conversation_memory,
+    ai_conversation_summary: response.ai_conversation_summary,
+    ai_last_interaction_summary: response.ai_last_interaction_summary,
   }
 }
 
@@ -6326,6 +6549,100 @@ function generateAiFollowUpPlaceholder(lead: Lead, tone: string) {
     emailFollowUp: `Subject: Quick follow-up on ${businessName}\n\nHi ${firstName},\n\nI wanted to follow up on your automation audit request for ${businessName}. Based on what you shared about ${serviceType}, ${contextLine}\n\n${toneGuidance.email}\n\nIf it is useful, you can book a quick audit here: ${bookingLink}\n\nBest,\nVjeko`,
     smsFollowUp: `Hi ${firstName}, following up on your automation audit request for ${businessName}. ${toneGuidance.sms} You can book here: ${bookingLink}`,
   }
+}
+
+function generateConversationMemoryPlaceholder(lead: Lead) {
+  const name = getLeadFirstName(lead)
+  const businessName = getReadableLeadField(lead.business_name, 'the business')
+  const serviceType = getReadableLeadField(lead.service_type, 'service')
+  const status = getLeadStatus(lead)
+  const replyStatus = getReplyStatus(lead)
+  const smsReplyStatus = getSmsReplyStatus(lead)
+  const appointmentStatus = getAppointmentStatus(lead)
+  const sequenceStatus = getFollowUpSequenceStatus(lead)
+  const latestInteraction = getLatestInteractionSummary(lead)
+
+  return {
+    conversationMemory: [
+      `${name} from ${businessName} is a ${serviceType} lead currently marked ${status}.`,
+      `Reply status is ${replyStatus}; SMS status is ${smsReplyStatus}; appointment status is ${appointmentStatus}; sequence status is ${sequenceStatus}.`,
+      getConversationMemoryNotesLine(lead),
+      getConversationMemoryAiLine(lead),
+    ]
+      .filter(Boolean)
+      .join(' '),
+    conversationSummary: `This lead should be handled based on current CRM status, reply history, appointment context, notes, and the latest AI recommendations. ${getPriorityNextBestAction(
+      lead,
+    )}`,
+    lastInteractionSummary: latestInteraction,
+  }
+}
+
+function getLatestInteractionSummary(lead: Lead) {
+  if (
+    typeof lead.last_reply_snippet === 'string' &&
+    lead.last_reply_snippet.trim().length > 0
+  ) {
+    return `Latest email reply: ${lead.last_reply_snippet.trim()}`
+  }
+
+  if (
+    typeof lead.last_sms_message === 'string' &&
+    lead.last_sms_message.trim().length > 0
+  ) {
+    return `Latest SMS context: ${lead.last_sms_message.trim()}`
+  }
+
+  if (
+    typeof lead.follow_up_message_log === 'string' &&
+    lead.follow_up_message_log.trim().length > 0
+  ) {
+    return `Latest follow-up log: ${getLastNonEmptyLine(lead.follow_up_message_log)}`
+  }
+
+  if (
+    typeof lead.notes === 'string' &&
+    lead.notes.trim().length > 0
+  ) {
+    return `Latest note context: ${getLastNonEmptyLine(lead.notes)}`
+  }
+
+  return 'No direct reply or follow-up interaction has been logged yet.'
+}
+
+function getConversationMemoryNotesLine(lead: Lead) {
+  if (typeof lead.notes === 'string' && lead.notes.trim().length > 0) {
+    return `Internal notes: ${getLastNonEmptyLine(lead.notes)}`
+  }
+
+  return ''
+}
+
+function getConversationMemoryAiLine(lead: Lead) {
+  const aiSignals = [
+    lead.ai_summary,
+    lead.ai_recommendation,
+    lead.ai_objection_risk,
+    lead.ai_next_best_action,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  if (aiSignals.length === 0) {
+    return ''
+  }
+
+  return `AI context: ${aiSignals.slice(0, 3).join(' ')}`
+}
+
+function getLastNonEmptyLine(value: string) {
+  const lines = value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  return lines.at(-1) ?? value.trim()
 }
 
 function getLeadFirstName(lead: Lead) {
