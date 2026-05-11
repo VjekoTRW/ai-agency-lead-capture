@@ -4986,7 +4986,7 @@ function parseAiInsightsWebhookResponse(responseJson: unknown) {
   return {
     ai_objection_risk: response.ai_objection_risk,
     ai_suggested_response: response.ai_suggested_response,
-    ai_close_probability: Math.round(closeProbability),
+    ai_close_probability: Math.min(100, Math.max(0, Math.round(closeProbability))),
     ai_next_best_action: response.ai_next_best_action,
   }
 }
