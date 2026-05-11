@@ -22,6 +22,8 @@ const N8N_WEBHOOK_URL =
 const N8N_SEQUENCE_WEBHOOK_URL =
   import.meta.env.VITE_N8N_SEQUENCE_WEBHOOK_URL ?? ''
 const N8N_SMS_WEBHOOK_URL = import.meta.env.VITE_N8N_SMS_WEBHOOK_URL ?? ''
+const N8N_AI_INSIGHTS_WEBHOOK_URL =
+  import.meta.env.VITE_N8N_AI_INSIGHTS_WEBHOOK_URL ?? ''
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -1482,41 +1484,46 @@ function DashboardPage({
   const handleGenerateAiInsights = async (lead: Lead) => {
     const leadKey = getLeadKey(lead)
     const updatedAt = new Date().toISOString()
-    const aiInsights = generateAiLeadInsightsPlaceholder(lead)
-    const aiInsightsPayload = {
-      ai_objection_risk: aiInsights.objectionRisk,
-      ai_suggested_response: aiInsights.suggestedResponse,
-      ai_close_probability: aiInsights.closeProbability,
-      ai_next_best_action: aiInsights.nextBestAction,
-      ai_insights_updated_at: updatedAt,
-      updated_at: updatedAt,
-    }
 
     setSavingAiInsightsLeadKey(leadKey)
     setAiInsightsMessage('')
 
-    const query = supabase.from('leads').update(aiInsightsPayload)
-    const { error: aiInsightsError } =
-      lead.id !== undefined && lead.id !== null
-        ? await query.eq('id', lead.id)
-        : await query.eq('email', lead.email)
+    try {
+      const aiInsightsPayload = N8N_AI_INSIGHTS_WEBHOOK_URL
+        ? await requestAiInsightsFromWebhook(lead, updatedAt)
+        : buildRuleBasedAiInsightsPayload(lead, updatedAt)
 
-    if (aiInsightsError) {
-      setAiInsightsMessage(`Error: ${aiInsightsError.message}`)
-    } else {
-      setLeads((currentLeads) =>
-        currentLeads.map((currentLead) =>
-          getLeadKey(currentLead) === leadKey
-            ? { ...currentLead, ...aiInsightsPayload }
+      const query = supabase.from('leads').update(aiInsightsPayload)
+      const { error: aiInsightsError } =
+        lead.id !== undefined && lead.id !== null
+          ? await query.eq('id', lead.id)
+          : await query.eq('email', lead.email)
+
+      if (aiInsightsError) {
+        setAiInsightsMessage(`Error: ${aiInsightsError.message}`)
+      } else {
+        const updatedLead = await refetchUpdatedLead(lead, aiInsightsPayload)
+
+        setLeads((currentLeads) =>
+          currentLeads.map((currentLead) =>
+            getLeadKey(currentLead) === leadKey ? updatedLead : currentLead,
+          ),
+        )
+        setSelectedLead((currentLead) =>
+          currentLead && getLeadKey(currentLead) === leadKey
+            ? updatedLead
             : currentLead,
-        ),
+        )
+        setAiInsightsMessage(
+          N8N_AI_INSIGHTS_WEBHOOK_URL
+            ? 'AI insights generated and saved.'
+            : 'AI insights saved with rule-based fallback.',
+        )
+      }
+    } catch (error) {
+      setAiInsightsMessage(
+        `Error: ${error instanceof Error ? error.message : 'Could not generate AI insights.'}`,
       )
-      setSelectedLead((currentLead) =>
-        currentLead && getLeadKey(currentLead) === leadKey
-          ? { ...currentLead, ...aiInsightsPayload }
-          : currentLead,
-      )
-      setAiInsightsMessage('AI insights saved.')
     }
 
     setSavingAiInsightsLeadKey(null)
@@ -4896,6 +4903,113 @@ function buildSmsWebhookPayload(lead: Lead) {
     lead_temperature: getLeadTemperature(lead),
     sms_reply_status: getSmsReplyStatus(lead),
   }
+}
+
+async function requestAiInsightsFromWebhook(lead: Lead, updatedAt: string) {
+  const response = await fetch(N8N_AI_INSIGHTS_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildAiInsightsWebhookPayload(lead)),
+  })
+
+  if (!response.ok) {
+    throw new Error(`n8n AI insights webhook failed with status ${response.status}`)
+  }
+
+  const responseJson = (await response.json()) as unknown
+  const aiInsightsResponse = parseAiInsightsWebhookResponse(responseJson)
+
+  return {
+    ...aiInsightsResponse,
+    ai_insights_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildRuleBasedAiInsightsPayload(lead: Lead, updatedAt: string) {
+  const aiInsights = generateAiLeadInsightsPlaceholder(lead)
+
+  return {
+    ai_objection_risk: aiInsights.objectionRisk,
+    ai_suggested_response: aiInsights.suggestedResponse,
+    ai_close_probability: aiInsights.closeProbability,
+    ai_next_best_action: aiInsights.nextBestAction,
+    ai_insights_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildAiInsightsWebhookPayload(lead: Lead) {
+  return {
+    lead_id: lead.id ?? null,
+    name: lead.name ?? null,
+    business_name: lead.business_name ?? null,
+    service_type: lead.service_type ?? null,
+    lead_source: lead.lead_source ?? null,
+    response_speed: lead.response_speed ?? null,
+    status: getLeadStatus(lead),
+    appointment_status: getAppointmentStatus(lead),
+    reply_status: getReplyStatus(lead),
+    sms_reply_status: getSmsReplyStatus(lead),
+    lead_score: getLeadScore(lead),
+    lead_temperature: getLeadTemperature(lead),
+    ai_summary: lead.ai_summary ?? null,
+    ai_recommendation: lead.ai_recommendation ?? null,
+    follow_up_sequence_status: getFollowUpSequenceStatus(lead),
+    last_reply_snippet: lead.last_reply_snippet ?? null,
+    last_sms_message: lead.last_sms_message ?? null,
+    notes: lead.notes ?? null,
+  }
+}
+
+function parseAiInsightsWebhookResponse(responseJson: unknown) {
+  if (
+    typeof responseJson !== 'object' ||
+    responseJson === null ||
+    Array.isArray(responseJson)
+  ) {
+    throw new Error('n8n AI insights webhook returned invalid JSON.')
+  }
+
+  const response = responseJson as Record<string, unknown>
+  const closeProbability = Number(response.ai_close_probability)
+
+  if (
+    typeof response.ai_objection_risk !== 'string' ||
+    typeof response.ai_suggested_response !== 'string' ||
+    typeof response.ai_next_best_action !== 'string' ||
+    Number.isNaN(closeProbability)
+  ) {
+    throw new Error('n8n AI insights webhook response is missing required fields.')
+  }
+
+  return {
+    ai_objection_risk: response.ai_objection_risk,
+    ai_suggested_response: response.ai_suggested_response,
+    ai_close_probability: Math.round(closeProbability),
+    ai_next_best_action: response.ai_next_best_action,
+  }
+}
+
+async function refetchUpdatedLead(
+  lead: Lead,
+  fallbackPayload: Partial<Lead>,
+): Promise<Lead> {
+  if (lead.id === undefined || lead.id === null) {
+    return applyLeadScore({ ...lead, ...fallbackPayload })
+  }
+
+  const { data: refreshedLead, error: refreshError } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('id', lead.id)
+    .single()
+
+  if (refreshError) {
+    throw new Error(refreshError.message)
+  }
+
+  return applyLeadScore(refreshedLead as Lead)
 }
 
 function calculateLeadScore(lead: Lead) {
