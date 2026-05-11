@@ -24,6 +24,8 @@ const N8N_SEQUENCE_WEBHOOK_URL =
 const N8N_SMS_WEBHOOK_URL = import.meta.env.VITE_N8N_SMS_WEBHOOK_URL ?? ''
 const N8N_AI_INSIGHTS_WEBHOOK_URL =
   import.meta.env.VITE_N8N_AI_INSIGHTS_WEBHOOK_URL ?? ''
+const N8N_CALL_PREP_WEBHOOK_URL =
+  import.meta.env.VITE_N8N_CALL_PREP_WEBHOOK_URL ?? ''
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -67,6 +69,11 @@ type Lead = {
   ai_close_probability?: number | null
   ai_next_best_action?: string | null
   ai_insights_updated_at?: string | null
+  ai_call_opening_angle?: string | null
+  ai_likely_objections?: string | null
+  ai_discovery_questions?: string | null
+  ai_recommended_tone?: string | null
+  ai_call_prep_updated_at?: string | null
   follow_up_sequence_status?: string | null
   last_follow_up_sent_at?: string | null
   next_sequence_step?: string | null
@@ -1145,6 +1152,9 @@ function DashboardPage({
   const [savingAiInsightsLeadKey, setSavingAiInsightsLeadKey] = useState<
     string | null
   >(null)
+  const [savingCallPrepLeadKey, setSavingCallPrepLeadKey] = useState<
+    string | null
+  >(null)
   const [savingSequenceLeadKey, setSavingSequenceLeadKey] = useState<
     string | null
   >(null)
@@ -1154,6 +1164,7 @@ function DashboardPage({
   const [followUpMessage, setFollowUpMessage] = useState('')
   const [aiSummaryMessage, setAiSummaryMessage] = useState('')
   const [aiInsightsMessage, setAiInsightsMessage] = useState('')
+  const [callPrepMessage, setCallPrepMessage] = useState('')
   const [sequenceMessage, setSequenceMessage] = useState('')
   const [smsMessage, setSmsMessage] = useState('')
 
@@ -1527,6 +1538,54 @@ function DashboardPage({
     }
 
     setSavingAiInsightsLeadKey(null)
+  }
+
+  const handleGenerateCallPrep = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+
+    setSavingCallPrepLeadKey(leadKey)
+    setCallPrepMessage('')
+
+    try {
+      const callPrepPayload = N8N_CALL_PREP_WEBHOOK_URL
+        ? await requestCallPrepFromWebhook(lead, updatedAt)
+        : buildRuleBasedCallPrepPayload(lead, updatedAt)
+
+      const query = supabase.from('leads').update(callPrepPayload)
+      const { error: callPrepError } =
+        lead.id !== undefined && lead.id !== null
+          ? await query.eq('id', lead.id)
+          : await query.eq('email', lead.email)
+
+      if (callPrepError) {
+        setCallPrepMessage(`Error: ${callPrepError.message}`)
+      } else {
+        const updatedLead = await refetchUpdatedLead(lead, callPrepPayload)
+
+        setLeads((currentLeads) =>
+          currentLeads.map((currentLead) =>
+            getLeadKey(currentLead) === leadKey ? updatedLead : currentLead,
+          ),
+        )
+        setSelectedLead((currentLead) =>
+          currentLead && getLeadKey(currentLead) === leadKey
+            ? updatedLead
+            : currentLead,
+        )
+        setCallPrepMessage(
+          N8N_CALL_PREP_WEBHOOK_URL
+            ? 'AI call prep generated and saved.'
+            : 'AI call prep saved with rule-based fallback.',
+        )
+      }
+    } catch (error) {
+      setCallPrepMessage(
+        `Error: ${error instanceof Error ? error.message : 'Could not generate call prep.'}`,
+      )
+    }
+
+    setSavingCallPrepLeadKey(null)
   }
 
   const handleSaveSequence = async (
@@ -2056,6 +2115,7 @@ function DashboardPage({
                             setFollowUpMessage('')
                             setAiSummaryMessage('')
                             setAiInsightsMessage('')
+                            setCallPrepMessage('')
                             setSequenceMessage('')
                             setSmsMessage('')
                           }}
@@ -2167,6 +2227,7 @@ function DashboardPage({
           isSavingAiInsights={
             savingAiInsightsLeadKey === getLeadKey(selectedLead)
           }
+          isSavingCallPrep={savingCallPrepLeadKey === getLeadKey(selectedLead)}
           isSavingSequence={savingSequenceLeadKey === getLeadKey(selectedLead)}
           isSavingSms={savingSmsLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
@@ -2174,6 +2235,7 @@ function DashboardPage({
           followUpMessage={followUpMessage}
           aiSummaryMessage={aiSummaryMessage}
           aiInsightsMessage={aiInsightsMessage}
+          callPrepMessage={callPrepMessage}
           sequenceMessage={sequenceMessage}
           smsMessage={smsMessage}
           onSaveNote={handleSaveNote}
@@ -2181,6 +2243,7 @@ function DashboardPage({
           onSaveFollowUp={handleSaveFollowUp}
           onGenerateAiSummary={handleGenerateAiSummary}
           onGenerateAiInsights={handleGenerateAiInsights}
+          onGenerateCallPrep={handleGenerateCallPrep}
           onSaveSequence={handleSaveSequence}
           onSendSequenceStep={handleSendSequenceStep}
           onSendSmsFollowUp={handleSendSmsFollowUp}
@@ -2631,6 +2694,7 @@ function LeadDetailModal({
   isSavingFollowUp,
   isSavingAiSummary,
   isSavingAiInsights,
+  isSavingCallPrep,
   isSavingSequence,
   isSavingSms,
   noteMessage,
@@ -2638,6 +2702,7 @@ function LeadDetailModal({
   followUpMessage,
   aiSummaryMessage,
   aiInsightsMessage,
+  callPrepMessage,
   sequenceMessage,
   smsMessage,
   onSaveNote,
@@ -2645,6 +2710,7 @@ function LeadDetailModal({
   onSaveFollowUp,
   onGenerateAiSummary,
   onGenerateAiInsights,
+  onGenerateCallPrep,
   onSaveSequence,
   onSendSequenceStep,
   onSendSmsFollowUp,
@@ -2656,6 +2722,7 @@ function LeadDetailModal({
   isSavingFollowUp: boolean
   isSavingAiSummary: boolean
   isSavingAiInsights: boolean
+  isSavingCallPrep: boolean
   isSavingSequence: boolean
   isSavingSms: boolean
   noteMessage: string
@@ -2663,6 +2730,7 @@ function LeadDetailModal({
   followUpMessage: string
   aiSummaryMessage: string
   aiInsightsMessage: string
+  callPrepMessage: string
   sequenceMessage: string
   smsMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
@@ -2691,6 +2759,7 @@ function LeadDetailModal({
   ) => Promise<void>
   onGenerateAiSummary: (lead: Lead) => Promise<void>
   onGenerateAiInsights: (lead: Lead) => Promise<void>
+  onGenerateCallPrep: (lead: Lead) => Promise<void>
   onSaveSequence: (
     lead: Lead,
     sequence: {
@@ -3542,6 +3611,53 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="AI Call Prep">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailField
+                  label="Opening Angle"
+                  value={lead.ai_call_opening_angle}
+                />
+                <DetailField
+                  label="Recommended Tone"
+                  value={lead.ai_recommended_tone}
+                />
+                <DetailField
+                  label="Last Updated"
+                  value={formatTorontoDate(lead.ai_call_prep_updated_at)}
+                />
+              </div>
+              <DetailField
+                label="Likely Objections"
+                value={lead.ai_likely_objections}
+              />
+              <DetailField
+                label="Discovery Questions"
+                value={lead.ai_discovery_questions}
+              />
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingCallPrep}
+                  onClick={() => onGenerateCallPrep(lead)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingCallPrep ? 'Generating...' : 'Generate Call Prep'}
+                </button>
+                {callPrepMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      callPrepMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {callPrepMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="Pipeline">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
@@ -3816,6 +3932,13 @@ function buildLeadActivityItems(lead: Lead) {
     activityItems.push({
       label: 'AI insights generated',
       time: formatTorontoDate(lead.ai_insights_updated_at),
+    })
+  }
+
+  if (lead.ai_call_prep_updated_at) {
+    activityItems.push({
+      label: 'AI call prep generated',
+      time: formatTorontoDate(lead.ai_call_prep_updated_at),
     })
   }
 
@@ -4962,6 +5085,83 @@ function buildAiInsightsWebhookPayload(lead: Lead) {
   }
 }
 
+async function requestCallPrepFromWebhook(lead: Lead, updatedAt: string) {
+  const response = await fetch(N8N_CALL_PREP_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildCallPrepWebhookPayload(lead)),
+  })
+
+  if (!response.ok) {
+    throw new Error(`n8n call prep webhook failed with status ${response.status}`)
+  }
+
+  const responseJson = (await response.json()) as unknown
+  const callPrepResponse = parseCallPrepWebhookResponse(responseJson)
+
+  return {
+    ...callPrepResponse,
+    ai_call_prep_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildRuleBasedCallPrepPayload(lead: Lead, updatedAt: string) {
+  const callPrep = generateCallPrepPlaceholder(lead)
+
+  return {
+    ai_call_opening_angle: callPrep.openingAngle,
+    ai_likely_objections: callPrep.likelyObjections,
+    ai_discovery_questions: callPrep.discoveryQuestions,
+    ai_recommended_tone: callPrep.recommendedTone,
+    ai_call_prep_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildCallPrepWebhookPayload(lead: Lead) {
+  return {
+    ...buildAiInsightsWebhookPayload(lead),
+    phone: lead.phone ?? null,
+    email: lead.email ?? null,
+    booked_at: lead.booked_at ?? null,
+    appointment_notes: lead.appointment_notes ?? null,
+    follow_up_notes: lead.follow_up_notes ?? null,
+    ai_objection_risk: lead.ai_objection_risk ?? null,
+    ai_suggested_response: lead.ai_suggested_response ?? null,
+    ai_close_probability: lead.ai_close_probability ?? null,
+    ai_next_best_action: lead.ai_next_best_action ?? null,
+  }
+}
+
+function parseCallPrepWebhookResponse(responseJson: unknown) {
+  if (
+    typeof responseJson !== 'object' ||
+    responseJson === null ||
+    Array.isArray(responseJson)
+  ) {
+    throw new Error('n8n call prep webhook returned invalid JSON.')
+  }
+
+  const response = responseJson as Record<string, unknown>
+
+  if (
+    typeof response.ai_call_opening_angle !== 'string' ||
+    typeof response.ai_likely_objections !== 'string' ||
+    typeof response.ai_discovery_questions !== 'string' ||
+    typeof response.ai_recommended_tone !== 'string'
+  ) {
+    throw new Error('n8n call prep webhook response is missing required fields.')
+  }
+
+  return {
+    ai_call_opening_angle: response.ai_call_opening_angle,
+    ai_likely_objections: response.ai_likely_objections,
+    ai_discovery_questions: response.ai_discovery_questions,
+    ai_recommended_tone: response.ai_recommended_tone,
+  }
+}
+
 function parseAiInsightsWebhookResponse(responseJson: unknown) {
   if (
     typeof responseJson !== 'object' ||
@@ -5194,6 +5394,44 @@ function generateAiLeadInsightsPlaceholder(lead: Lead) {
     objectionRisk: getRuleBasedObjectionRisk(lead),
     suggestedResponse: getSuggestedResponseByTemperature(temperature),
     nextBestAction: 'Nurture lightly and wait for stronger engagement.',
+  }
+}
+
+function generateCallPrepPlaceholder(lead: Lead) {
+  const temperature = getLeadTemperature(lead)
+  const serviceType = getReadableLeadField(lead.service_type, 'service')
+  const businessName = getReadableLeadField(lead.business_name, 'the business')
+
+  if (temperature === 'HOT') {
+    return {
+      openingAngle: `Open by tying ${businessName}'s ${serviceType} demand to faster response and booked calls.`,
+      likelyObjections:
+        'They may worry about implementation time, workflow disruption, or whether automation will sound personal enough.',
+      discoveryQuestions:
+        'How many qualified leads do you miss after hours? What happens when a quote request comes in? Where does follow-up currently stall?',
+      recommendedTone: 'Direct, confident, and booking-focused.',
+    }
+  }
+
+  if (temperature === 'WARM') {
+    return {
+      openingAngle: `Start with a practical audit of where ${businessName} may be losing ${serviceType} leads in follow-up.`,
+      likelyObjections:
+        'They may need clearer ROI, proof that the problem is urgent, or a simple first step.',
+      discoveryQuestions:
+        'Which lead sources matter most? How quickly do you respond now? What would one extra booked call per week be worth?',
+      recommendedTone: 'Helpful, consultative, and specific.',
+    }
+  }
+
+  return {
+    openingAngle:
+      'Keep the opening educational and focus on one small follow-up improvement.',
+    likelyObjections:
+      'They may not feel enough urgency yet or may not be actively prioritizing automation.',
+    discoveryQuestions:
+      'What prompted you to look at follow-up? Are missed calls a current issue? When would improving response speed become a priority?',
+    recommendedTone: 'Low-pressure, patient, and value-led.',
   }
 }
 
