@@ -28,6 +28,8 @@ const N8N_CALL_PREP_WEBHOOK_URL =
   import.meta.env.VITE_N8N_CALL_PREP_WEBHOOK_URL ?? ''
 const N8N_AI_FOLLOWUP_WEBHOOK_URL =
   import.meta.env.VITE_N8N_AI_FOLLOWUP_WEBHOOK_URL ?? ''
+const N8N_AI_PRIORITY_WEBHOOK_URL =
+  import.meta.env.VITE_N8N_AI_PRIORITY_WEBHOOK_URL ?? ''
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -1870,30 +1872,15 @@ function DashboardPage({
 
   const handleGeneratePriorityRanking = async () => {
     const updatedAt = new Date().toISOString()
-    const rankedQueue = buildPriorityQueue(leads)
+    const visibleLeads = priorityQueue.map((item) => item.lead)
 
     setIsSavingPriorityRanking(true)
     setPriorityMessage('')
 
     try {
-      const updates = rankedQueue.map(({ lead, priorityRank, priorityReason }) => {
-        const payload = {
-          ai_priority_rank: priorityRank,
-          ai_priority_reason: priorityReason,
-          ai_priority_updated_at: updatedAt,
-          updated_at: updatedAt,
-        }
-        const query = supabase.from('leads').update(payload)
-
-        return {
-          leadKey: getLeadKey(lead),
-          payload,
-          request:
-            lead.id !== undefined && lead.id !== null
-              ? query.eq('id', lead.id)
-              : query.eq('email', lead.email),
-        }
-      })
+      const updates = N8N_AI_PRIORITY_WEBHOOK_URL
+        ? await requestAiPriorityUpdatesFromWebhook(visibleLeads, updatedAt)
+        : buildRuleBasedPriorityUpdates(visibleLeads, updatedAt)
 
       const results = await Promise.all(updates.map((update) => update.request))
       const failedUpdate = results.find((result) => result.error)
@@ -1905,12 +1892,7 @@ function DashboardPage({
           updates.map((update) => [update.leadKey, update.payload]),
         )
 
-        setLeads((currentLeads) =>
-          currentLeads.map((currentLead) => ({
-            ...currentLead,
-            ...(payloadByLeadKey.get(getLeadKey(currentLead)) ?? {}),
-          })),
-        )
+        await fetchLeads()
         setSelectedLead((currentLead) =>
           currentLead
             ? {
@@ -1919,7 +1901,11 @@ function DashboardPage({
               }
             : currentLead,
         )
-        setPriorityMessage('Priority ranking generated and saved.')
+        setPriorityMessage(
+          N8N_AI_PRIORITY_WEBHOOK_URL
+            ? 'AI priority ranking generated and saved.'
+            : 'Priority ranking generated and saved with rule-based fallback.',
+        )
       }
     } catch (error) {
       setPriorityMessage(
@@ -4581,6 +4567,147 @@ function buildPriorityQueue(leads: Lead[]): PriorityQueueItem[] {
       ...item,
       priorityRank: index + 1,
     }))
+}
+
+function buildRuleBasedPriorityUpdates(leads: Lead[], updatedAt: string) {
+  return buildPriorityQueue(leads).map(({ lead, priorityRank, priorityReason }) =>
+    buildPrioritySaveRequest(lead, {
+      ai_priority_rank: priorityRank,
+      ai_priority_reason: priorityReason,
+      ai_priority_updated_at: updatedAt,
+      updated_at: updatedAt,
+    }),
+  )
+}
+
+async function requestAiPriorityUpdatesFromWebhook(
+  leads: Lead[],
+  updatedAt: string,
+) {
+  const response = await fetch(N8N_AI_PRIORITY_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildAiPriorityWebhookPayload(leads)),
+  })
+
+  if (!response.ok) {
+    throw new Error(`n8n AI priority webhook failed with status ${response.status}`)
+  }
+
+  const responseJson = (await response.json()) as unknown
+  const rankings = parseAiPriorityWebhookResponse(responseJson)
+  const leadById = new Map(
+    leads
+      .filter((lead) => lead.id !== undefined && lead.id !== null)
+      .map((lead) => [String(lead.id), lead]),
+  )
+  const updates = rankings
+    .map((ranking) => {
+      const lead = leadById.get(String(ranking.lead_id))
+
+      if (!lead) {
+        return null
+      }
+
+      return buildPrioritySaveRequest(lead, {
+        ai_priority_rank: ranking.ai_priority_rank,
+        ai_priority_reason: ranking.ai_priority_reason,
+        ai_next_best_action: ranking.ai_next_best_action,
+        ai_priority_updated_at: updatedAt,
+        updated_at: updatedAt,
+      })
+    })
+    .filter((update): update is NonNullable<typeof update> => update !== null)
+
+  if (updates.length === 0 && leads.length > 0) {
+    throw new Error('n8n AI priority webhook response did not match any leads.')
+  }
+
+  return updates
+}
+
+function buildPrioritySaveRequest(lead: Lead, payload: Partial<Lead>) {
+  const query = supabase.from('leads').update(payload)
+
+  return {
+    leadKey: getLeadKey(lead),
+    payload,
+    request:
+      lead.id !== undefined && lead.id !== null
+        ? query.eq('id', lead.id)
+        : query.eq('email', lead.email),
+  }
+}
+
+function buildAiPriorityWebhookPayload(leads: Lead[]) {
+  return {
+    leads: leads.map((lead) => ({
+      id: lead.id ?? null,
+      name: lead.name ?? null,
+      business_name: lead.business_name ?? null,
+      service_type: lead.service_type ?? null,
+      lead_source: lead.lead_source ?? null,
+      response_speed: lead.response_speed ?? null,
+      lead_score: getLeadScore(lead),
+      lead_temperature: getLeadTemperature(lead),
+      ai_close_probability: lead.ai_close_probability ?? null,
+      ai_next_best_action: lead.ai_next_best_action ?? null,
+      reply_status: getReplyStatus(lead),
+      sms_reply_status: getSmsReplyStatus(lead),
+      appointment_status: getAppointmentStatus(lead),
+      follow_up_status: getFollowUpStatus(lead),
+      follow_up_at: lead.follow_up_at ?? null,
+      follow_up_sequence_status: getFollowUpSequenceStatus(lead),
+      status: getLeadStatus(lead),
+      notes: lead.notes ?? null,
+    })),
+  }
+}
+
+function parseAiPriorityWebhookResponse(responseJson: unknown) {
+  if (
+    typeof responseJson !== 'object' ||
+    responseJson === null ||
+    Array.isArray(responseJson)
+  ) {
+    throw new Error('n8n AI priority webhook returned invalid JSON.')
+  }
+
+  const response = responseJson as Record<string, unknown>
+
+  if (!Array.isArray(response.rankings)) {
+    throw new Error('n8n AI priority webhook response is missing rankings.')
+  }
+
+  return response.rankings.map((ranking) => {
+    if (
+      typeof ranking !== 'object' ||
+      ranking === null ||
+      Array.isArray(ranking)
+    ) {
+      throw new Error('n8n AI priority webhook returned an invalid ranking.')
+    }
+
+    const rankingRecord = ranking as Record<string, unknown>
+    const priorityRank = Number(rankingRecord.ai_priority_rank)
+
+    if (
+      (typeof rankingRecord.lead_id !== 'string' &&
+        typeof rankingRecord.lead_id !== 'number') ||
+      Number.isNaN(priorityRank) ||
+      typeof rankingRecord.ai_priority_reason !== 'string' ||
+      typeof rankingRecord.ai_next_best_action !== 'string'
+    ) {
+      throw new Error('n8n AI priority webhook ranking is missing required fields.')
+    }
+
+    return {
+      lead_id: rankingRecord.lead_id,
+      ai_priority_rank: Math.max(1, Math.round(priorityRank)),
+      ai_priority_reason: rankingRecord.ai_priority_reason,
+      ai_next_best_action: rankingRecord.ai_next_best_action,
+    }
+  })
 }
 
 function calculateLeadPriority(
