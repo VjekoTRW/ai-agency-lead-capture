@@ -26,6 +26,8 @@ const N8N_AI_INSIGHTS_WEBHOOK_URL =
   import.meta.env.VITE_N8N_AI_INSIGHTS_WEBHOOK_URL ?? ''
 const N8N_CALL_PREP_WEBHOOK_URL =
   import.meta.env.VITE_N8N_CALL_PREP_WEBHOOK_URL ?? ''
+const N8N_AI_FOLLOWUP_WEBHOOK_URL =
+  import.meta.env.VITE_N8N_AI_FOLLOWUP_WEBHOOK_URL ?? ''
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -74,6 +76,10 @@ type Lead = {
   ai_discovery_questions?: string | null
   ai_recommended_tone?: string | null
   ai_call_prep_updated_at?: string | null
+  ai_generated_email_followup?: string | null
+  ai_generated_sms_followup?: string | null
+  ai_followup_tone?: string | null
+  ai_followup_updated_at?: string | null
   follow_up_sequence_status?: string | null
   last_follow_up_sent_at?: string | null
   next_sequence_step?: string | null
@@ -143,6 +149,14 @@ const sequenceStepOptions = [
 ] as const
 
 const sequenceStepValues = [...sequenceStepOptions, 'Completed'] as const
+
+const aiFollowUpToneOptions = [
+  'Helpful',
+  'Direct',
+  'Soft',
+  'Urgent',
+  'Re-engagement',
+] as const
 
 const appointmentHourOptions = [
   '01',
@@ -1155,6 +1169,9 @@ function DashboardPage({
   const [savingCallPrepLeadKey, setSavingCallPrepLeadKey] = useState<
     string | null
   >(null)
+  const [savingAiFollowUpLeadKey, setSavingAiFollowUpLeadKey] = useState<
+    string | null
+  >(null)
   const [savingSequenceLeadKey, setSavingSequenceLeadKey] = useState<
     string | null
   >(null)
@@ -1165,6 +1182,7 @@ function DashboardPage({
   const [aiSummaryMessage, setAiSummaryMessage] = useState('')
   const [aiInsightsMessage, setAiInsightsMessage] = useState('')
   const [callPrepMessage, setCallPrepMessage] = useState('')
+  const [aiFollowUpMessage, setAiFollowUpMessage] = useState('')
   const [sequenceMessage, setSequenceMessage] = useState('')
   const [smsMessage, setSmsMessage] = useState('')
 
@@ -1586,6 +1604,54 @@ function DashboardPage({
     }
 
     setSavingCallPrepLeadKey(null)
+  }
+
+  const handleGenerateAiFollowUp = async (lead: Lead, tone: string) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+
+    setSavingAiFollowUpLeadKey(leadKey)
+    setAiFollowUpMessage('')
+
+    try {
+      const aiFollowUpPayload = N8N_AI_FOLLOWUP_WEBHOOK_URL
+        ? await requestAiFollowUpFromWebhook(lead, tone, updatedAt)
+        : buildRuleBasedAiFollowUpPayload(lead, tone, updatedAt)
+
+      const query = supabase.from('leads').update(aiFollowUpPayload)
+      const { error: aiFollowUpError } =
+        lead.id !== undefined && lead.id !== null
+          ? await query.eq('id', lead.id)
+          : await query.eq('email', lead.email)
+
+      if (aiFollowUpError) {
+        setAiFollowUpMessage(`Error: ${aiFollowUpError.message}`)
+      } else {
+        const updatedLead = await refetchUpdatedLead(lead, aiFollowUpPayload)
+
+        setLeads((currentLeads) =>
+          currentLeads.map((currentLead) =>
+            getLeadKey(currentLead) === leadKey ? updatedLead : currentLead,
+          ),
+        )
+        setSelectedLead((currentLead) =>
+          currentLead && getLeadKey(currentLead) === leadKey
+            ? updatedLead
+            : currentLead,
+        )
+        setAiFollowUpMessage(
+          N8N_AI_FOLLOWUP_WEBHOOK_URL
+            ? 'AI follow-up generated and saved.'
+            : 'AI follow-up saved with rule-based fallback.',
+        )
+      }
+    } catch (error) {
+      setAiFollowUpMessage(
+        `Error: ${error instanceof Error ? error.message : 'Could not generate AI follow-up.'}`,
+      )
+    }
+
+    setSavingAiFollowUpLeadKey(null)
   }
 
   const handleSaveSequence = async (
@@ -2228,6 +2294,9 @@ function DashboardPage({
             savingAiInsightsLeadKey === getLeadKey(selectedLead)
           }
           isSavingCallPrep={savingCallPrepLeadKey === getLeadKey(selectedLead)}
+          isSavingAiFollowUp={
+            savingAiFollowUpLeadKey === getLeadKey(selectedLead)
+          }
           isSavingSequence={savingSequenceLeadKey === getLeadKey(selectedLead)}
           isSavingSms={savingSmsLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
@@ -2236,6 +2305,7 @@ function DashboardPage({
           aiSummaryMessage={aiSummaryMessage}
           aiInsightsMessage={aiInsightsMessage}
           callPrepMessage={callPrepMessage}
+          aiFollowUpMessage={aiFollowUpMessage}
           sequenceMessage={sequenceMessage}
           smsMessage={smsMessage}
           onSaveNote={handleSaveNote}
@@ -2244,6 +2314,7 @@ function DashboardPage({
           onGenerateAiSummary={handleGenerateAiSummary}
           onGenerateAiInsights={handleGenerateAiInsights}
           onGenerateCallPrep={handleGenerateCallPrep}
+          onGenerateAiFollowUp={handleGenerateAiFollowUp}
           onSaveSequence={handleSaveSequence}
           onSendSequenceStep={handleSendSequenceStep}
           onSendSmsFollowUp={handleSendSmsFollowUp}
@@ -2695,6 +2766,7 @@ function LeadDetailModal({
   isSavingAiSummary,
   isSavingAiInsights,
   isSavingCallPrep,
+  isSavingAiFollowUp,
   isSavingSequence,
   isSavingSms,
   noteMessage,
@@ -2703,6 +2775,7 @@ function LeadDetailModal({
   aiSummaryMessage,
   aiInsightsMessage,
   callPrepMessage,
+  aiFollowUpMessage,
   sequenceMessage,
   smsMessage,
   onSaveNote,
@@ -2711,6 +2784,7 @@ function LeadDetailModal({
   onGenerateAiSummary,
   onGenerateAiInsights,
   onGenerateCallPrep,
+  onGenerateAiFollowUp,
   onSaveSequence,
   onSendSequenceStep,
   onSendSmsFollowUp,
@@ -2723,6 +2797,7 @@ function LeadDetailModal({
   isSavingAiSummary: boolean
   isSavingAiInsights: boolean
   isSavingCallPrep: boolean
+  isSavingAiFollowUp: boolean
   isSavingSequence: boolean
   isSavingSms: boolean
   noteMessage: string
@@ -2731,6 +2806,7 @@ function LeadDetailModal({
   aiSummaryMessage: string
   aiInsightsMessage: string
   callPrepMessage: string
+  aiFollowUpMessage: string
   sequenceMessage: string
   smsMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
@@ -2760,6 +2836,7 @@ function LeadDetailModal({
   onGenerateAiSummary: (lead: Lead) => Promise<void>
   onGenerateAiInsights: (lead: Lead) => Promise<void>
   onGenerateCallPrep: (lead: Lead) => Promise<void>
+  onGenerateAiFollowUp: (lead: Lead, tone: string) => Promise<void>
   onSaveSequence: (
     lead: Lead,
     sequence: {
@@ -2799,6 +2876,9 @@ function LeadDetailModal({
   const [sequenceMessageLog, setSequenceMessageLog] = useState(
     lead.follow_up_message_log ?? '',
   )
+  const [aiFollowUpTone, setAiFollowUpTone] = useState(
+    getValidAiFollowUpTone(lead.ai_followup_tone),
+  )
   const [copyMessage, setCopyMessage] = useState('')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const calendlyLink =
@@ -2821,6 +2901,7 @@ function LeadDetailModal({
     setSequenceStatus(getFollowUpSequenceStatus(lead))
     setNextSequenceStep(getNextSequenceStep(lead))
     setSequenceMessageLog(lead.follow_up_message_log ?? '')
+    setAiFollowUpTone(getValidAiFollowUpTone(lead.ai_followup_tone))
     setCopyMessage('')
   }, [lead])
 
@@ -3658,6 +3739,88 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="AI Follow-Up Generator">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                    Tone
+                  </span>
+                  <select
+                    value={aiFollowUpTone}
+                    onChange={(event) =>
+                      setAiFollowUpTone(getValidAiFollowUpTone(event.target.value))
+                    }
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  >
+                    {aiFollowUpToneOptions.map((tone) => (
+                      <option key={tone} value={tone}>
+                        {tone}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <DetailField
+                  label="Last Updated"
+                  value={formatTorontoDate(lead.ai_followup_updated_at)}
+                />
+              </div>
+
+              <DetailField
+                label="Email follow-up"
+                value={lead.ai_generated_email_followup}
+              />
+              <DetailField
+                label="SMS follow-up"
+                value={lead.ai_generated_sms_followup}
+              />
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                <button
+                  type="button"
+                  disabled={isSavingAiFollowUp}
+                  onClick={() => onGenerateAiFollowUp(lead, aiFollowUpTone)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingAiFollowUp ? 'Generating...' : 'Generate Follow-Up'}
+                </button>
+                <button
+                  type="button"
+                  disabled={!lead.ai_generated_email_followup}
+                  onClick={() =>
+                    handleCopy(
+                      'Email follow-up',
+                      lead.ai_generated_email_followup ?? '',
+                    )
+                  }
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Copy email
+                </button>
+                <button
+                  type="button"
+                  disabled={!lead.ai_generated_sms_followup}
+                  onClick={() =>
+                    handleCopy('SMS follow-up', lead.ai_generated_sms_followup ?? '')
+                  }
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Copy SMS
+                </button>
+              </div>
+
+              {aiFollowUpMessage ? (
+                <p
+                  className={`text-sm font-medium ${
+                    aiFollowUpMessage.startsWith('Error:')
+                      ? 'text-red-700'
+                      : 'text-emerald-700'
+                  }`}
+                >
+                  {aiFollowUpMessage}
+                </p>
+              ) : null}
+            </DetailSection>
+
             <DetailSection title="Pipeline">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Status" value={getLeadStatus(lead)} />
@@ -3939,6 +4102,13 @@ function buildLeadActivityItems(lead: Lead) {
     activityItems.push({
       label: 'AI call prep generated',
       time: formatTorontoDate(lead.ai_call_prep_updated_at),
+    })
+  }
+
+  if (lead.ai_followup_updated_at) {
+    activityItems.push({
+      label: 'AI follow-up generated',
+      time: formatTorontoDate(lead.ai_followup_updated_at),
     })
   }
 
@@ -4898,6 +5068,18 @@ function getValidNextSequenceStep(step: string) {
     : 'Initial follow-up'
 }
 
+function getValidAiFollowUpTone(
+  value: unknown,
+): (typeof aiFollowUpToneOptions)[number] {
+  const tone = typeof value === 'string' ? value : ''
+
+  return aiFollowUpToneOptions.includes(
+    tone as (typeof aiFollowUpToneOptions)[number],
+  )
+    ? (tone as (typeof aiFollowUpToneOptions)[number])
+    : 'Helpful'
+}
+
 function buildSequencePayload(
   lead: Lead,
   sequence: {
@@ -5025,6 +5207,61 @@ function buildSmsWebhookPayload(lead: Lead) {
     lead_score: getLeadScore(lead),
     lead_temperature: getLeadTemperature(lead),
     sms_reply_status: getSmsReplyStatus(lead),
+  }
+}
+
+async function requestAiFollowUpFromWebhook(
+  lead: Lead,
+  tone: string,
+  updatedAt: string,
+) {
+  const response = await fetch(N8N_AI_FOLLOWUP_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildAiFollowUpWebhookPayload(lead, tone)),
+  })
+
+  if (!response.ok) {
+    throw new Error(`n8n AI follow-up webhook failed with status ${response.status}`)
+  }
+
+  const responseJson = (await response.json()) as unknown
+  const aiFollowUpResponse = parseAiFollowUpWebhookResponse(responseJson)
+
+  return {
+    ...aiFollowUpResponse,
+    ai_followup_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildRuleBasedAiFollowUpPayload(
+  lead: Lead,
+  tone: string,
+  updatedAt: string,
+) {
+  const aiFollowUp = generateAiFollowUpPlaceholder(
+    lead,
+    getValidAiFollowUpTone(tone),
+  )
+
+  return {
+    ai_generated_email_followup: aiFollowUp.emailFollowUp,
+    ai_generated_sms_followup: aiFollowUp.smsFollowUp,
+    ai_followup_tone: aiFollowUp.tone,
+    ai_followup_updated_at: updatedAt,
+    updated_at: updatedAt,
+  }
+}
+
+function buildAiFollowUpWebhookPayload(lead: Lead, tone: string) {
+  return {
+    ...buildCallPrepWebhookPayload(lead),
+    selected_tone: getValidAiFollowUpTone(tone),
+    ai_followup_tone: getValidAiFollowUpTone(tone),
+    ai_generated_email_followup: lead.ai_generated_email_followup ?? null,
+    ai_generated_sms_followup: lead.ai_generated_sms_followup ?? null,
+    ai_followup_updated_at: lead.ai_followup_updated_at ?? null,
   }
 }
 
@@ -5159,6 +5396,31 @@ function parseCallPrepWebhookResponse(responseJson: unknown) {
     ai_likely_objections: response.ai_likely_objections,
     ai_discovery_questions: response.ai_discovery_questions,
     ai_recommended_tone: response.ai_recommended_tone,
+  }
+}
+
+function parseAiFollowUpWebhookResponse(responseJson: unknown) {
+  if (
+    typeof responseJson !== 'object' ||
+    responseJson === null ||
+    Array.isArray(responseJson)
+  ) {
+    throw new Error('n8n AI follow-up webhook returned invalid JSON.')
+  }
+
+  const response = responseJson as Record<string, unknown>
+
+  if (
+    typeof response.ai_generated_email_followup !== 'string' ||
+    typeof response.ai_generated_sms_followup !== 'string'
+  ) {
+    throw new Error('n8n AI follow-up webhook response is missing required fields.')
+  }
+
+  return {
+    ai_generated_email_followup: response.ai_generated_email_followup,
+    ai_generated_sms_followup: response.ai_generated_sms_followup,
+    ai_followup_tone: getValidAiFollowUpTone(response.ai_followup_tone),
   }
 }
 
@@ -5433,6 +5695,86 @@ function generateCallPrepPlaceholder(lead: Lead) {
       'What prompted you to look at follow-up? Are missed calls a current issue? When would improving response speed become a priority?',
     recommendedTone: 'Low-pressure, patient, and value-led.',
   }
+}
+
+function generateAiFollowUpPlaceholder(lead: Lead, tone: string) {
+  const validTone = getValidAiFollowUpTone(tone)
+  const firstName = getLeadFirstName(lead)
+  const businessName = getReadableLeadField(lead.business_name, 'your business')
+  const serviceType = getReadableLeadField(lead.service_type, 'lead follow-up')
+  const bookingLink =
+    typeof lead.calendly_url === 'string' && lead.calendly_url.trim().length > 0
+      ? lead.calendly_url.trim()
+      : bookingUrl
+  const contextLine = getAiFollowUpContextLine(lead)
+  const toneGuidance = getAiFollowUpToneGuidance(validTone)
+
+  return {
+    tone: validTone,
+    emailFollowUp: `Subject: Quick follow-up on ${businessName}\n\nHi ${firstName},\n\nI wanted to follow up on your automation audit request for ${businessName}. Based on what you shared about ${serviceType}, ${contextLine}\n\n${toneGuidance.email}\n\nIf it is useful, you can book a quick audit here: ${bookingLink}\n\nBest,\nVjeko`,
+    smsFollowUp: `Hi ${firstName}, following up on your automation audit request for ${businessName}. ${toneGuidance.sms} You can book here: ${bookingLink}`,
+  }
+}
+
+function getLeadFirstName(lead: Lead) {
+  const name = typeof lead.name === 'string' ? lead.name.trim() : ''
+
+  return name.split(/\s+/)[0] || 'there'
+}
+
+function getAiFollowUpContextLine(lead: Lead) {
+  if (getAppointmentStatus(lead) === 'No-show') {
+    return 'it may be worth finding a lower-friction next step so follow-up does not stall again.'
+  }
+
+  if (hasAnyLeadReply(lead)) {
+    return 'there is already some engagement, so the next message should make the next step easy.'
+  }
+
+  if (getLeadTemperature(lead) === 'HOT') {
+    return 'there may be a clear opportunity to recover missed leads quickly.'
+  }
+
+  if (getLeadTemperature(lead) === 'WARM') {
+    return 'a practical follow-up could help clarify where leads are slipping through.'
+  }
+
+  return 'a light check-in is the best next move until timing becomes clearer.'
+}
+
+function getAiFollowUpToneGuidance(tone: string) {
+  const guidanceByTone: Record<
+    (typeof aiFollowUpToneOptions)[number],
+    { email: string; sms: string }
+  > = {
+    Helpful: {
+      email:
+        'Happy to map out where response speed or missed follow-up may be costing you booked jobs.',
+      sms: 'Happy to help map out where follow-up may be costing booked jobs.',
+    },
+    Direct: {
+      email:
+        'The main thing to solve is speed to lead. If that is still a priority, the audit will show what to fix first.',
+      sms: 'If speed to lead is still a priority, the audit will show what to fix first.',
+    },
+    Soft: {
+      email:
+        'No pressure if now is not the right time. I can still share a simple starting point from what you submitted.',
+      sms: 'No pressure if now is not the right time. I can share a simple starting point.',
+    },
+    Urgent: {
+      email:
+        'If leads are still waiting hours for a response, this is worth looking at before more booked jobs are missed.',
+      sms: 'If leads are still waiting hours, this is worth looking at before more jobs are missed.',
+    },
+    'Re-engagement': {
+      email:
+        'Checking back in because this may still be quietly costing booked calls even if it slipped down the priority list.',
+      sms: 'Checking back in in case follow-up is still costing booked calls.',
+    },
+  }
+
+  return guidanceByTone[getValidAiFollowUpTone(tone)]
 }
 
 function getRuleBasedCloseProbability(score: number, minimum: number, maximum: number) {
