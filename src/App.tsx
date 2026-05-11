@@ -80,6 +80,9 @@ type Lead = {
   ai_generated_sms_followup?: string | null
   ai_followup_tone?: string | null
   ai_followup_updated_at?: string | null
+  ai_priority_rank?: number | null
+  ai_priority_reason?: string | null
+  ai_priority_updated_at?: string | null
   follow_up_sequence_status?: string | null
   last_follow_up_sent_at?: string | null
   next_sequence_step?: string | null
@@ -189,7 +192,31 @@ const timeRangeOptions = [
 ] as const
 
 type TimeRange = (typeof timeRangeOptions)[number]
-type DashboardView = 'leads' | 'analytics'
+type DashboardView = 'leads' | 'priority' | 'analytics'
+
+function getDashboardViewFromPath(path: string): DashboardView {
+  if (path === '/dashboard/analytics') {
+    return 'analytics'
+  }
+
+  if (path === '/dashboard/priority') {
+    return 'priority'
+  }
+
+  return 'leads'
+}
+
+function getDashboardTitle(view: DashboardView) {
+  if (view === 'analytics') {
+    return 'Analytics dashboard'
+  }
+
+  if (view === 'priority') {
+    return 'Priority queue'
+  }
+
+  return 'Lead pipeline'
+}
 
 function App() {
   const [path, setPath] = useState(window.location.pathname)
@@ -230,7 +257,11 @@ function App() {
     setPath(nextPath)
   }
 
-  if (path === '/dashboard' || path === '/dashboard/analytics') {
+  if (
+    path === '/dashboard' ||
+    path === '/dashboard/priority' ||
+    path === '/dashboard/analytics'
+  ) {
     return (
       <ProtectedDashboard
         authState={authState}
@@ -1141,9 +1172,7 @@ function DashboardPage({
 }) {
   const [leads, setLeads] = useState<Lead[]>([])
   const [activeDashboardView, setActiveDashboardView] =
-    useState<DashboardView>(
-      currentPath === '/dashboard/analytics' ? 'analytics' : 'leads',
-    )
+    useState<DashboardView>(getDashboardViewFromPath(currentPath))
   const [timeRange, setTimeRange] = useState<TimeRange>('Last 30 days')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -1176,6 +1205,7 @@ function DashboardPage({
     string | null
   >(null)
   const [savingSmsLeadKey, setSavingSmsLeadKey] = useState<string | null>(null)
+  const [isSavingPriorityRanking, setIsSavingPriorityRanking] = useState(false)
   const [noteMessage, setNoteMessage] = useState('')
   const [appointmentMessage, setAppointmentMessage] = useState('')
   const [followUpMessage, setFollowUpMessage] = useState('')
@@ -1185,6 +1215,7 @@ function DashboardPage({
   const [aiFollowUpMessage, setAiFollowUpMessage] = useState('')
   const [sequenceMessage, setSequenceMessage] = useState('')
   const [smsMessage, setSmsMessage] = useState('')
+  const [priorityMessage, setPriorityMessage] = useState('')
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -1213,9 +1244,7 @@ function DashboardPage({
   }, [])
 
   useEffect(() => {
-    setActiveDashboardView(
-      currentPath === '/dashboard/analytics' ? 'analytics' : 'leads',
-    )
+    setActiveDashboardView(getDashboardViewFromPath(currentPath))
   }, [currentPath])
 
   const timeFilteredLeads = useMemo(
@@ -1226,6 +1255,13 @@ function DashboardPage({
   const dashboardAnalytics = useMemo(
     () => buildDashboardAnalytics(timeFilteredLeads, timeRange),
     [timeFilteredLeads, timeRange],
+  )
+
+  const priorityQueue = useMemo(() => buildPriorityQueue(leads), [leads])
+
+  const priorityAnalytics = useMemo(
+    () => buildPriorityAnalytics(priorityQueue),
+    [priorityQueue],
   )
 
   const filteredLeads = useMemo(() => {
@@ -1832,9 +1868,85 @@ function DashboardPage({
     setSavingSmsLeadKey(null)
   }
 
+  const handleGeneratePriorityRanking = async () => {
+    const updatedAt = new Date().toISOString()
+    const rankedQueue = buildPriorityQueue(leads)
+
+    setIsSavingPriorityRanking(true)
+    setPriorityMessage('')
+
+    try {
+      const updates = rankedQueue.map(({ lead, priorityRank, priorityReason }) => {
+        const payload = {
+          ai_priority_rank: priorityRank,
+          ai_priority_reason: priorityReason,
+          ai_priority_updated_at: updatedAt,
+          updated_at: updatedAt,
+        }
+        const query = supabase.from('leads').update(payload)
+
+        return {
+          leadKey: getLeadKey(lead),
+          payload,
+          request:
+            lead.id !== undefined && lead.id !== null
+              ? query.eq('id', lead.id)
+              : query.eq('email', lead.email),
+        }
+      })
+
+      const results = await Promise.all(updates.map((update) => update.request))
+      const failedUpdate = results.find((result) => result.error)
+
+      if (failedUpdate?.error) {
+        setPriorityMessage(`Error: ${failedUpdate.error.message}`)
+      } else {
+        const payloadByLeadKey = new Map(
+          updates.map((update) => [update.leadKey, update.payload]),
+        )
+
+        setLeads((currentLeads) =>
+          currentLeads.map((currentLead) => ({
+            ...currentLead,
+            ...(payloadByLeadKey.get(getLeadKey(currentLead)) ?? {}),
+          })),
+        )
+        setSelectedLead((currentLead) =>
+          currentLead
+            ? {
+                ...currentLead,
+                ...(payloadByLeadKey.get(getLeadKey(currentLead)) ?? {}),
+              }
+            : currentLead,
+        )
+        setPriorityMessage('Priority ranking generated and saved.')
+      }
+    } catch (error) {
+      setPriorityMessage(
+        `Error: ${error instanceof Error ? error.message : 'Could not generate priority ranking.'}`,
+      )
+    }
+
+    setIsSavingPriorityRanking(false)
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     navigate('/login')
+  }
+
+  const openLeadDetail = (lead: Lead) => {
+    setSelectedLead(lead)
+    setNoteMessage('')
+    setAppointmentMessage('')
+    setFollowUpMessage('')
+    setAiSummaryMessage('')
+    setAiInsightsMessage('')
+    setCallPrepMessage('')
+    setAiFollowUpMessage('')
+    setSequenceMessage('')
+    setSmsMessage('')
+    setPriorityMessage('')
   }
 
   return (
@@ -1874,6 +1986,21 @@ function DashboardPage({
               Leads
             </a>
             <a
+              href="/dashboard/priority"
+              onClick={(event) => {
+                event.preventDefault()
+                setActiveDashboardView('priority')
+                navigate('/dashboard/priority')
+              }}
+              className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition ${
+                activeDashboardView === 'priority'
+                  ? 'bg-cyan-400 text-slate-950'
+                  : 'text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              Priority Queue
+            </a>
+            <a
               href="/dashboard/analytics"
               onClick={(event) => {
                 event.preventDefault()
@@ -1899,9 +2026,7 @@ function DashboardPage({
                   Dashboard
                 </p>
                 <h2 className="text-2xl font-bold text-slate-950">
-                  {activeDashboardView === 'analytics'
-                    ? 'Analytics dashboard'
-                    : 'Lead pipeline'}
+                  {getDashboardTitle(activeDashboardView)}
                 </h2>
               </div>
               <div className="flex items-center gap-3">
@@ -1930,6 +2055,16 @@ function DashboardPage({
                 loading={loading}
                 timeRange={timeRange}
                 onTimeRangeChange={setTimeRange}
+              />
+            ) : activeDashboardView === 'priority' ? (
+              <PriorityQueueDashboard
+                loading={loading}
+                priorityQueue={priorityQueue}
+                priorityAnalytics={priorityAnalytics}
+                isSavingPriorityRanking={isSavingPriorityRanking}
+                priorityMessage={priorityMessage}
+                onGeneratePriorityRanking={handleGeneratePriorityRanking}
+                onOpenLead={openLeadDetail}
               />
             ) : (
               <>
@@ -2174,17 +2309,7 @@ function DashboardPage({
                       {filteredLeads.map((lead) => (
                         <tr
                           key={getLeadKey(lead)}
-                          onClick={() => {
-                            setSelectedLead(lead)
-                            setNoteMessage('')
-                            setAppointmentMessage('')
-                            setFollowUpMessage('')
-                            setAiSummaryMessage('')
-                            setAiInsightsMessage('')
-                            setCallPrepMessage('')
-                            setSequenceMessage('')
-                            setSmsMessage('')
-                          }}
+                          onClick={() => openLeadDetail(lead)}
                           className="cursor-pointer align-top transition hover:bg-slate-50"
                         >
                           <td className="px-4 py-3">
@@ -2356,6 +2481,21 @@ type DashboardAnalytics = {
   statusChartData: Array<{ status: string; leads: number }>
 }
 
+type PriorityQueueItem = {
+  lead: Lead
+  priorityRank: number
+  priorityScore: number
+  priorityReason: string
+  nextBestAction: string
+  closeProbability: number
+}
+
+type PriorityAnalytics = {
+  highPriorityLeads: number
+  needsContactToday: number
+  staleLeads: number
+}
+
 function KpiCard({
   label,
   value,
@@ -2396,6 +2536,137 @@ function MetricCard({
           {value}
         </p>
       )}
+    </div>
+  )
+}
+
+function PriorityQueueDashboard({
+  loading,
+  priorityQueue,
+  priorityAnalytics,
+  isSavingPriorityRanking,
+  priorityMessage,
+  onGeneratePriorityRanking,
+  onOpenLead,
+}: {
+  loading: boolean
+  priorityQueue: PriorityQueueItem[]
+  priorityAnalytics: PriorityAnalytics
+  isSavingPriorityRanking: boolean
+  priorityMessage: string
+  onGeneratePriorityRanking: () => Promise<void>
+  onOpenLead: (lead: Lead) => void
+}) {
+  return (
+    <div className="space-y-5">
+      <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-500">Priority Queue</p>
+          <h3 className="text-lg font-bold text-slate-950">
+            Ranked follow-up focus
+          </h3>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            disabled={isSavingPriorityRanking || loading}
+            onClick={onGeneratePriorityRanking}
+            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSavingPriorityRanking
+              ? 'Generating...'
+              : 'Generate Priority Ranking'}
+          </button>
+          {priorityMessage ? (
+            <p
+              className={`text-sm font-medium ${
+                priorityMessage.startsWith('Error:')
+                  ? 'text-red-700'
+                  : 'text-emerald-700'
+              }`}
+            >
+              {priorityMessage}
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <KpiCard
+          label="High Priority Leads"
+          value={priorityAnalytics.highPriorityLeads}
+          loading={loading}
+        />
+        <KpiCard
+          label="Needs Contact Today"
+          value={priorityAnalytics.needsContactToday}
+          loading={loading}
+        />
+        <KpiCard
+          label="Stale Leads"
+          value={priorityAnalytics.staleLeads}
+          loading={loading}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        {loading ? (
+          <div className="p-8 text-center text-sm font-medium text-slate-500">
+            Loading priority queue...
+          </div>
+        ) : priorityQueue.length === 0 ? (
+          <div className="p-8 text-center text-sm font-medium text-slate-500">
+            No leads available for priority ranking.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[1120px] w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Lead name</th>
+                  <th className="px-4 py-3">Business</th>
+                  <th className="px-4 py-3">Priority rank</th>
+                  <th className="px-4 py-3">Priority reason</th>
+                  <th className="px-4 py-3">Next best action</th>
+                  <th className="px-4 py-3">Close probability</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {priorityQueue.map((item) => (
+                  <tr
+                    key={getLeadKey(item.lead)}
+                    onClick={() => onOpenLead(item.lead)}
+                    className="cursor-pointer align-top transition hover:bg-slate-50"
+                  >
+                    <td className="px-4 py-3">
+                      <span className="font-semibold text-cyan-700">
+                        {displayValue(item.lead.name)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-medium">
+                      {displayValue(item.lead.business_name)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={getPriorityBadgeTone(item.priorityRank)}>
+                        {String(item.priorityRank)}
+                      </Badge>
+                    </td>
+                    <td className="max-w-md px-4 py-3 text-slate-600">
+                      {item.priorityReason}
+                    </td>
+                    <td className="max-w-xs px-4 py-3 text-slate-600">
+                      {item.nextBestAction}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {item.closeProbability}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -3864,6 +4135,18 @@ function LeadDetailModal({
                   value={getNextSequenceStep(lead)}
                 />
                 <DetailField
+                  label="Priority rank"
+                  value={lead.ai_priority_rank}
+                />
+                <DetailField
+                  label="Priority updated"
+                  value={formatTorontoDate(lead.ai_priority_updated_at)}
+                />
+                <DetailField
+                  label="Priority reason"
+                  value={lead.ai_priority_reason}
+                />
+                <DetailField
                   label="Created at"
                   value={formatTorontoDate(lead.created_at)}
                 />
@@ -4266,6 +4549,208 @@ function Badge({
     >
       {children}
     </span>
+  )
+}
+
+function getPriorityBadgeTone(rank: number): 'red' | 'yellow' | 'gray' | 'blue' | 'green' {
+  if (rank <= 5) {
+    return 'red'
+  }
+
+  if (rank <= 15) {
+    return 'yellow'
+  }
+
+  return 'gray'
+}
+
+function buildPriorityQueue(leads: Lead[]): PriorityQueueItem[] {
+  return leads
+    .map((lead) => ({
+      lead,
+      ...calculateLeadPriority(lead),
+    }))
+    .sort((firstItem, secondItem) => {
+      if (secondItem.priorityScore !== firstItem.priorityScore) {
+        return secondItem.priorityScore - firstItem.priorityScore
+      }
+
+      return getLeadScore(secondItem.lead) - getLeadScore(firstItem.lead)
+    })
+    .map((item, index) => ({
+      ...item,
+      priorityRank: index + 1,
+    }))
+}
+
+function calculateLeadPriority(
+  lead: Lead,
+): Omit<PriorityQueueItem, 'lead' | 'priorityRank'> {
+  const score = getLeadScore(lead)
+  const closeProbability = getPriorityCloseProbability(lead)
+  const status = getLeadStatus(lead)
+  const appointmentStatus = getAppointmentStatus(lead)
+  const sequenceStatus = getFollowUpSequenceStatus(lead)
+  const reasons: string[] = []
+  let priorityScore = score + Math.round(closeProbability * 0.4)
+
+  if (status === 'Closed') {
+    priorityScore -= 250
+    reasons.push('Closed lead')
+  } else if (status === 'Lost') {
+    priorityScore -= 250
+    reasons.push('Lost lead')
+  }
+
+  if (status === 'Booked' || appointmentStatus === 'Booked') {
+    priorityScore += 80
+    reasons.push('Booked lead')
+  } else if (appointmentStatus === 'Completed') {
+    priorityScore += 55
+    reasons.push('Completed appointment')
+  } else if (appointmentStatus === 'No-show') {
+    priorityScore += 25
+    reasons.push('No-show needs re-engagement')
+  }
+
+  if (hasLeadReplied(lead)) {
+    priorityScore += 55
+    reasons.push('Email replied')
+  }
+
+  if (hasLeadSmsReplied(lead)) {
+    priorityScore += 45
+    reasons.push('SMS replied')
+  }
+
+  if (getLeadTemperature(lead) === 'HOT') {
+    priorityScore += 40
+    reasons.push('Hot lead')
+  } else if (getLeadTemperature(lead) === 'WARM') {
+    priorityScore += 18
+    reasons.push('Warm lead')
+  }
+
+  if (isFollowUpOverdue(lead)) {
+    priorityScore += 50
+    reasons.push('Overdue follow-up')
+  } else if (isFollowUpDueToday(lead)) {
+    priorityScore += 35
+    reasons.push('Follow-up due today')
+  }
+
+  if (sequenceStatus === 'Active') {
+    priorityScore += 15
+    reasons.push('Active sequence')
+  } else if (sequenceStatus === 'Paused') {
+    priorityScore += 8
+    reasons.push('Paused sequence')
+  } else if (sequenceStatus === 'Completed') {
+    priorityScore -= 20
+    reasons.push('Sequence completed')
+  } else if (sequenceStatus === 'Stopped') {
+    priorityScore -= 35
+    reasons.push('Sequence stopped')
+  }
+
+  if (typeof lead.ai_next_best_action === 'string' && lead.ai_next_best_action.trim()) {
+    reasons.push('AI next action available')
+  }
+
+  return {
+    priorityScore,
+    priorityReason: reasons.slice(0, 4).join('; ') || 'Ranked from lead score and activity signals',
+    nextBestAction: getPriorityNextBestAction(lead),
+    closeProbability,
+  }
+}
+
+function getPriorityCloseProbability(lead: Lead) {
+  if (typeof lead.ai_close_probability === 'number') {
+    return Math.min(100, Math.max(0, Math.round(lead.ai_close_probability)))
+  }
+
+  return getRuleBasedCloseProbability(getLeadScore(lead), 10, 90)
+}
+
+function getPriorityNextBestAction(lead: Lead) {
+  if (typeof lead.ai_next_best_action === 'string' && lead.ai_next_best_action.trim()) {
+    return lead.ai_next_best_action.trim()
+  }
+
+  if (getLeadStatus(lead) === 'Closed') {
+    return 'No immediate action needed.'
+  }
+
+  if (getLeadStatus(lead) === 'Lost') {
+    return 'Keep low priority unless they re-engage.'
+  }
+
+  if (getAppointmentStatus(lead) === 'Booked') {
+    return 'Prepare for the booked call.'
+  }
+
+  if (hasAnyLeadReply(lead)) {
+    return 'Reply while engagement is active.'
+  }
+
+  if (isFollowUpOverdue(lead)) {
+    return 'Send the overdue follow-up today.'
+  }
+
+  if (isFollowUpDueToday(lead)) {
+    return 'Contact this lead today.'
+  }
+
+  if (getLeadTemperature(lead) === 'HOT') {
+    return 'Prioritize immediate follow-up and push toward booking.'
+  }
+
+  return 'Continue nurture and watch for engagement.'
+}
+
+function buildPriorityAnalytics(priorityQueue: PriorityQueueItem[]): PriorityAnalytics {
+  return {
+    highPriorityLeads: priorityQueue.filter(isHighPriorityQueueItem).length,
+    needsContactToday: priorityQueue.filter((item) =>
+      doesLeadNeedContactToday(item.lead),
+    ).length,
+    staleLeads: priorityQueue.filter((item) => isStaleLead(item.lead)).length,
+  }
+}
+
+function isHighPriorityQueueItem(item: PriorityQueueItem) {
+  return (
+    item.priorityScore >= 110 &&
+    getLeadStatus(item.lead) !== 'Closed' &&
+    getLeadStatus(item.lead) !== 'Lost'
+  )
+}
+
+function doesLeadNeedContactToday(lead: Lead) {
+  return (
+    getLeadStatus(lead) !== 'Closed' &&
+    getLeadStatus(lead) !== 'Lost' &&
+    (isFollowUpOverdue(lead) ||
+      isFollowUpDueToday(lead) ||
+      (getLeadStatus(lead) === 'New' && !hasAnyLeadReply(lead)))
+  )
+}
+
+function isStaleLead(lead: Lead) {
+  if (
+    getLeadStatus(lead) === 'Closed' ||
+    getLeadStatus(lead) === 'Lost' ||
+    hasAnyLeadReply(lead)
+  ) {
+    return false
+  }
+
+  const lastActivityDate = parseSupabaseTimestamp(lead.updated_at ?? lead.created_at)
+
+  return (
+    lastActivityDate !== null &&
+    Date.now() - lastActivityDate.getTime() > 14 * 24 * 60 * 60 * 1000
   )
 }
 
