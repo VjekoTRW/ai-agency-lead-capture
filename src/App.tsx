@@ -103,6 +103,15 @@ type Lead = {
   next_sequence_step?: string | null
   follow_up_message_log?: string | null
   follow_up_sms_log?: string | null
+  task_title?: string | null
+  task_description?: string | null
+  task_type?: string | null
+  task_priority?: string | null
+  task_due_at?: string | null
+  task_status?: string | null
+  task_completed_at?: string | null
+  auto_task_generated_at?: string | null
+  auto_task_reason?: string | null
   status?: string | null
   notes?: string | null
   booked_at?: string | null
@@ -208,7 +217,7 @@ const timeRangeOptions = [
 ] as const
 
 type TimeRange = (typeof timeRangeOptions)[number]
-type DashboardView = 'leads' | 'priority' | 'analytics'
+type DashboardView = 'leads' | 'tasks' | 'priority' | 'analytics'
 
 function getDashboardViewFromPath(path: string): DashboardView {
   if (path === '/dashboard/analytics') {
@@ -217,6 +226,10 @@ function getDashboardViewFromPath(path: string): DashboardView {
 
   if (path === '/dashboard/priority') {
     return 'priority'
+  }
+
+  if (path === '/dashboard/tasks') {
+    return 'tasks'
   }
 
   return 'leads'
@@ -229,6 +242,10 @@ function getDashboardTitle(view: DashboardView) {
 
   if (view === 'priority') {
     return 'Priority queue'
+  }
+
+  if (view === 'tasks') {
+    return 'Task queue'
   }
 
   return 'Lead pipeline'
@@ -275,6 +292,7 @@ function App() {
 
   if (
     path === '/dashboard' ||
+    path === '/dashboard/tasks' ||
     path === '/dashboard/priority' ||
     path === '/dashboard/analytics'
   ) {
@@ -1226,6 +1244,7 @@ function DashboardPage({
     string | null
   >(null)
   const [savingSmsLeadKey, setSavingSmsLeadKey] = useState<string | null>(null)
+  const [savingTaskLeadKey, setSavingTaskLeadKey] = useState<string | null>(null)
   const [isSavingPriorityRanking, setIsSavingPriorityRanking] = useState(false)
   const [noteMessage, setNoteMessage] = useState('')
   const [appointmentMessage, setAppointmentMessage] = useState('')
@@ -1238,6 +1257,7 @@ function DashboardPage({
   const [forecastMessage, setForecastMessage] = useState('')
   const [sequenceMessage, setSequenceMessage] = useState('')
   const [smsMessage, setSmsMessage] = useState('')
+  const [taskMessage, setTaskMessage] = useState('')
   const [priorityMessage, setPriorityMessage] = useState('')
 
   const fetchLeads = async () => {
@@ -1285,6 +1305,13 @@ function DashboardPage({
   const priorityAnalytics = useMemo(
     () => buildPriorityAnalytics(priorityQueue),
     [priorityQueue],
+  )
+
+  const taskQueue = useMemo(() => buildTaskQueue(leads), [leads])
+
+  const taskAnalytics = useMemo(
+    () => buildTaskAnalytics(taskQueue),
+    [taskQueue],
   )
 
   const filteredLeads = useMemo(() => {
@@ -1990,6 +2017,80 @@ function DashboardPage({
     setSavingSmsLeadKey(null)
   }
 
+  const handleGenerateTask = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+    const taskPayload = buildAutoTaskPayload(lead, updatedAt)
+
+    setSavingTaskLeadKey(leadKey)
+    setTaskMessage('')
+
+    const query = supabase.from('leads').update(taskPayload)
+    const { error: taskError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (taskError) {
+      setTaskMessage(`Error: ${taskError.message}`)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, ...taskPayload }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, ...taskPayload }
+          : currentLead,
+      )
+      setTaskMessage('Task generated.')
+    }
+
+    setSavingTaskLeadKey(null)
+  }
+
+  const handleCompleteTask = async (lead: Lead) => {
+    const leadKey = getLeadKey(lead)
+    const updatedAt = new Date().toISOString()
+    const taskPayload = {
+      task_status: 'Completed',
+      task_completed_at: updatedAt,
+      updated_at: updatedAt,
+    }
+
+    setSavingTaskLeadKey(leadKey)
+    setTaskMessage('')
+
+    const query = supabase.from('leads').update(taskPayload)
+    const { error: taskError } =
+      lead.id !== undefined && lead.id !== null
+        ? await query.eq('id', lead.id)
+        : await query.eq('email', lead.email)
+
+    if (taskError) {
+      setTaskMessage(`Error: ${taskError.message}`)
+    } else {
+      setLeads((currentLeads) =>
+        currentLeads.map((currentLead) =>
+          getLeadKey(currentLead) === leadKey
+            ? { ...currentLead, ...taskPayload }
+            : currentLead,
+        ),
+      )
+      setSelectedLead((currentLead) =>
+        currentLead && getLeadKey(currentLead) === leadKey
+          ? { ...currentLead, ...taskPayload }
+          : currentLead,
+      )
+      setTaskMessage('Task completed.')
+    }
+
+    setSavingTaskLeadKey(null)
+  }
+
   const handleGeneratePriorityRanking = async () => {
     const updatedAt = new Date().toISOString()
     const visibleLeads = priorityQueue.map((item) => item.lead)
@@ -2054,6 +2155,7 @@ function DashboardPage({
     setForecastMessage('')
     setSequenceMessage('')
     setSmsMessage('')
+    setTaskMessage('')
     setPriorityMessage('')
   }
 
@@ -2092,6 +2194,21 @@ function DashboardPage({
               }`}
             >
               Leads
+            </a>
+            <a
+              href="/dashboard/tasks"
+              onClick={(event) => {
+                event.preventDefault()
+                setActiveDashboardView('tasks')
+                navigate('/dashboard/tasks')
+              }}
+              className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition ${
+                activeDashboardView === 'tasks'
+                  ? 'bg-cyan-400 text-slate-950'
+                  : 'text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              Tasks
             </a>
             <a
               href="/dashboard/priority"
@@ -2172,6 +2289,13 @@ function DashboardPage({
                 isSavingPriorityRanking={isSavingPriorityRanking}
                 priorityMessage={priorityMessage}
                 onGeneratePriorityRanking={handleGeneratePriorityRanking}
+                onOpenLead={openLeadDetail}
+              />
+            ) : activeDashboardView === 'tasks' ? (
+              <TaskQueueDashboard
+                loading={loading}
+                taskQueue={taskQueue}
+                taskAnalytics={taskAnalytics}
                 onOpenLead={openLeadDetail}
               />
             ) : (
@@ -2536,6 +2660,7 @@ function DashboardPage({
           isSavingForecast={savingForecastLeadKey === getLeadKey(selectedLead)}
           isSavingSequence={savingSequenceLeadKey === getLeadKey(selectedLead)}
           isSavingSms={savingSmsLeadKey === getLeadKey(selectedLead)}
+          isSavingTask={savingTaskLeadKey === getLeadKey(selectedLead)}
           noteMessage={noteMessage}
           appointmentMessage={appointmentMessage}
           followUpMessage={followUpMessage}
@@ -2547,6 +2672,7 @@ function DashboardPage({
           forecastMessage={forecastMessage}
           sequenceMessage={sequenceMessage}
           smsMessage={smsMessage}
+          taskMessage={taskMessage}
           onSaveNote={handleSaveNote}
           onSaveAppointment={handleSaveAppointment}
           onSaveFollowUp={handleSaveFollowUp}
@@ -2559,6 +2685,8 @@ function DashboardPage({
           onSaveSequence={handleSaveSequence}
           onSendSequenceStep={handleSendSequenceStep}
           onSendSmsFollowUp={handleSendSmsFollowUp}
+          onGenerateTask={handleGenerateTask}
+          onCompleteTask={handleCompleteTask}
           onClose={() => setSelectedLead(null)}
         />
       ) : null}
@@ -2610,6 +2738,23 @@ type PriorityAnalytics = {
   highPriorityLeads: number
   needsContactToday: number
   staleLeads: number
+}
+
+type TaskQueueItem = {
+  lead: Lead
+  taskTitle: string
+  taskDescription: string
+  taskType: string
+  taskPriority: string
+  taskDueAt: string | null
+  taskStatus: string
+}
+
+type TaskAnalytics = {
+  pendingTasks: number
+  dueTodayTasks: number
+  overdueTasks: number
+  completedTasks: number
 }
 
 function KpiCard({
@@ -2775,6 +2920,124 @@ function PriorityQueueDashboard({
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-900">
                       {item.closeProbability}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TaskQueueDashboard({
+  loading,
+  taskQueue,
+  taskAnalytics,
+  onOpenLead,
+}: {
+  loading: boolean
+  taskQueue: TaskQueueItem[]
+  taskAnalytics: TaskAnalytics
+  onOpenLead: (lead: Lead) => void
+}) {
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <p className="text-sm font-medium text-slate-500">Tasks</p>
+        <h3 className="text-lg font-bold text-slate-950">
+          Recommended next actions
+        </h3>
+      </section>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <KpiCard
+          label="Pending tasks"
+          value={taskAnalytics.pendingTasks}
+          loading={loading}
+        />
+        <KpiCard
+          label="Due today"
+          value={taskAnalytics.dueTodayTasks}
+          loading={loading}
+        />
+        <KpiCard
+          label="Overdue"
+          value={taskAnalytics.overdueTasks}
+          loading={loading}
+        />
+        <KpiCard
+          label="Completed"
+          value={taskAnalytics.completedTasks}
+          loading={loading}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        {loading ? (
+          <div className="p-8 text-center text-sm font-medium text-slate-500">
+            Loading tasks...
+          </div>
+        ) : taskQueue.length === 0 ? (
+          <div className="p-8 text-center text-sm font-medium text-slate-500">
+            No tasks generated yet.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[1180px] w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Task</th>
+                  <th className="px-4 py-3">Lead</th>
+                  <th className="px-4 py-3">Business</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Priority</th>
+                  <th className="px-4 py-3">Due date</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Reason</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {taskQueue.map((item) => (
+                  <tr
+                    key={getLeadKey(item.lead)}
+                    onClick={() => onOpenLead(item.lead)}
+                    className="cursor-pointer align-top transition hover:bg-slate-50"
+                  >
+                    <td className="max-w-xs px-4 py-3">
+                      <p className="font-semibold text-cyan-700">
+                        {item.taskTitle}
+                      </p>
+                      <p className="mt-1 text-slate-500">
+                        {item.taskDescription}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 font-medium">
+                      {displayValue(item.lead.name)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {displayValue(item.lead.business_name)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {item.taskType}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={getTaskPriorityBadgeTone(item.taskPriority)}>
+                        {item.taskPriority}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {formatTorontoDate(item.taskDueAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={getTaskStatusBadgeTone(item.taskStatus)}>
+                        {item.taskStatus}
+                      </Badge>
+                    </td>
+                    <td className="max-w-xs px-4 py-3 text-slate-600">
+                      {displayValue(item.lead.auto_task_reason)}
                     </td>
                   </tr>
                 ))}
@@ -3158,6 +3421,7 @@ function LeadDetailModal({
   isSavingForecast,
   isSavingSequence,
   isSavingSms,
+  isSavingTask,
   noteMessage,
   appointmentMessage,
   followUpMessage,
@@ -3169,6 +3433,7 @@ function LeadDetailModal({
   forecastMessage,
   sequenceMessage,
   smsMessage,
+  taskMessage,
   onSaveNote,
   onSaveAppointment,
   onSaveFollowUp,
@@ -3181,6 +3446,8 @@ function LeadDetailModal({
   onSaveSequence,
   onSendSequenceStep,
   onSendSmsFollowUp,
+  onGenerateTask,
+  onCompleteTask,
   onClose,
 }: {
   lead: Lead
@@ -3195,6 +3462,7 @@ function LeadDetailModal({
   isSavingForecast: boolean
   isSavingSequence: boolean
   isSavingSms: boolean
+  isSavingTask: boolean
   noteMessage: string
   appointmentMessage: string
   followUpMessage: string
@@ -3206,6 +3474,7 @@ function LeadDetailModal({
   forecastMessage: string
   sequenceMessage: string
   smsMessage: string
+  taskMessage: string
   onSaveNote: (lead: Lead, notes: string) => Promise<void>
   onSaveAppointment: (
     lead: Lead,
@@ -3248,6 +3517,8 @@ function LeadDetailModal({
   ) => Promise<void>
   onSendSequenceStep: (lead: Lead) => Promise<void>
   onSendSmsFollowUp: (lead: Lead) => Promise<void>
+  onGenerateTask: (lead: Lead) => Promise<void>
+  onCompleteTask: (lead: Lead) => Promise<void>
   onClose: () => void
 }) {
   const [notes, setNotes] = useState(lead.notes ?? '')
@@ -3996,6 +4267,61 @@ function LeadDetailModal({
               </div>
             </DetailSection>
 
+            <DetailSection title="Tasks">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailField label="Task title" value={lead.task_title} />
+                <DetailField label="Type" value={lead.task_type} />
+                <DetailField label="Priority" value={lead.task_priority} />
+                <DetailField
+                  label="Due date"
+                  value={formatTorontoDate(lead.task_due_at)}
+                />
+                <DetailField label="Status" value={getTaskStatus(lead)} />
+                <DetailField
+                  label="Completed at"
+                  value={formatTorontoDate(lead.task_completed_at)}
+                />
+              </div>
+              <DetailField
+                label="Description"
+                value={lead.task_description}
+              />
+              <DetailField
+                label="Auto task reason"
+                value={lead.auto_task_reason}
+              />
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  disabled={isSavingTask}
+                  onClick={() => onGenerateTask(lead)}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingTask ? 'Generating...' : 'Generate Task'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingTask || getTaskStatus(lead) === 'Completed'}
+                  onClick={() => onCompleteTask(lead)}
+                  className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Mark task completed
+                </button>
+                {taskMessage ? (
+                  <p
+                    className={`text-sm font-medium ${
+                      taskMessage.startsWith('Error:')
+                        ? 'text-red-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {taskMessage}
+                  </p>
+                ) : null}
+              </div>
+            </DetailSection>
+
             <DetailSection title="AI Qualification">
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailField label="Lead score" value={getLeadScore(lead)} />
@@ -4671,6 +4997,20 @@ function buildLeadActivityItems(lead: Lead) {
     time: formatTorontoDate(lead.updated_at ?? lead.created_at),
   })
 
+  if (lead.auto_task_generated_at) {
+    activityItems.push({
+      label: 'Auto task generated',
+      time: formatTorontoDate(lead.auto_task_generated_at),
+    })
+  }
+
+  if (getTaskStatus(lead) === 'Completed' && lead.task_completed_at) {
+    activityItems.push({
+      label: 'Task completed',
+      time: formatTorontoDate(lead.task_completed_at),
+    })
+  }
+
   if (typeof lead.notes === 'string' && lead.notes.trim().length > 0) {
     activityItems.push({
       label: 'Internal note added',
@@ -5158,6 +5498,214 @@ function isHighRiskForecastLead(lead: Lead) {
     getLeadStatus(lead) === 'Lost' ||
     getAppointmentStatus(lead) === 'No-show'
   )
+}
+
+function buildTaskQueue(leads: Lead[]): TaskQueueItem[] {
+  return leads
+    .filter((lead) => hasGeneratedTask(lead))
+    .map((lead) => ({
+      lead,
+      taskTitle: getTaskTextField(lead.task_title, 'Review lead'),
+      taskDescription: getTaskTextField(
+        lead.task_description,
+        'Review this lead and choose the next action.',
+      ),
+      taskType: getTaskTextField(lead.task_type, 'Review'),
+      taskPriority: getTaskPriority(lead),
+      taskDueAt: typeof lead.task_due_at === 'string' ? lead.task_due_at : null,
+      taskStatus: getTaskStatus(lead),
+    }))
+    .sort((firstTask, secondTask) => {
+      if (firstTask.taskStatus !== secondTask.taskStatus) {
+        return firstTask.taskStatus === 'Completed' ? 1 : -1
+      }
+
+      const priorityDifference =
+        getTaskPriorityWeight(secondTask.taskPriority) -
+        getTaskPriorityWeight(firstTask.taskPriority)
+      if (priorityDifference !== 0) {
+        return priorityDifference
+      }
+
+      return (
+        (parseSupabaseTimestamp(firstTask.taskDueAt)?.getTime() ?? Infinity) -
+        (parseSupabaseTimestamp(secondTask.taskDueAt)?.getTime() ?? Infinity)
+      )
+    })
+}
+
+function buildTaskAnalytics(taskQueue: TaskQueueItem[]): TaskAnalytics {
+  return {
+    pendingTasks: taskQueue.filter((task) => task.taskStatus === 'Pending').length,
+    dueTodayTasks: taskQueue.filter(
+      (task) => task.taskStatus !== 'Completed' && isTaskDueToday(task.lead),
+    ).length,
+    overdueTasks: taskQueue.filter(
+      (task) => task.taskStatus !== 'Completed' && isTaskOverdue(task.lead),
+    ).length,
+    completedTasks: taskQueue.filter((task) => task.taskStatus === 'Completed')
+      .length,
+  }
+}
+
+function buildAutoTaskPayload(lead: Lead, updatedAt: string): Partial<Lead> {
+  const task = generateAutoTask(lead)
+
+  return {
+    task_title: task.title,
+    task_description: task.description,
+    task_type: task.type,
+    task_priority: task.priority,
+    task_due_at: task.dueAt,
+    task_status: 'Pending',
+    task_completed_at: null,
+    auto_task_generated_at: updatedAt,
+    auto_task_reason: task.reason,
+    updated_at: updatedAt,
+  }
+}
+
+function generateAutoTask(lead: Lead) {
+  const now = new Date()
+
+  if (hasAnyLeadReply(lead)) {
+    return {
+      title: 'Respond to lead',
+      description: 'Lead has replied. Review the latest reply or SMS and respond.',
+      type: 'Response',
+      priority: 'High',
+      dueAt: addHours(now, 1).toISOString(),
+      reason: 'Email or SMS reply detected.',
+    }
+  }
+
+  if (getAppointmentStatus(lead) === 'Booked') {
+    const bookedAt = parseSupabaseTimestamp(lead.booked_at)
+
+    return {
+      title: 'Prepare for booked audit call',
+      description: 'Review lead context, notes, AI call prep, and appointment details.',
+      type: 'Appointment prep',
+      priority: 'High',
+      dueAt: bookedAt ? addHours(bookedAt, -2).toISOString() : addDays(now, 1).toISOString(),
+      reason: 'Appointment status is booked.',
+    }
+  }
+
+  if (
+    getFollowUpStatus(lead) === 'Overdue' ||
+    getFollowUpDisplayLabel(lead) === 'Overdue'
+  ) {
+    return {
+      title: 'Complete overdue follow-up',
+      description: 'Follow up immediately and update the lead record.',
+      type: 'Follow-up',
+      priority: 'High',
+      dueAt: now.toISOString(),
+      reason: 'Follow-up is overdue.',
+    }
+  }
+
+  if (getLeadTemperature(lead) === 'HOT' || getLeadScore(lead) >= 75) {
+    return {
+      title: 'Contact hot lead',
+      description: 'Prioritize outreach and try to move the lead toward booking.',
+      type: 'Outreach',
+      priority: 'High',
+      dueAt: addHours(now, 2).toISOString(),
+      reason: 'Lead is hot or has a score of 75+.',
+    }
+  }
+
+  if (getFollowUpSequenceStatus(lead) === 'Active') {
+    return {
+      title: 'Review active follow-up sequence',
+      description: 'Check current sequence step, replies, and next planned message.',
+      type: 'Sequence review',
+      priority: 'Medium',
+      dueAt: addDays(now, 1).toISOString(),
+      reason: 'Follow-up sequence is active.',
+    }
+  }
+
+  return {
+    title: 'Review lead',
+    description: 'Review the lead record and decide the next best action.',
+    type: 'Review',
+    priority: 'Medium',
+    dueAt: addDays(now, 1).toISOString(),
+    reason: 'No higher-priority trigger matched.',
+  }
+}
+
+function hasGeneratedTask(lead: Lead) {
+  return typeof lead.task_title === 'string' && lead.task_title.trim().length > 0
+}
+
+function getTaskTextField(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : fallback
+}
+
+function getTaskStatus(lead: Lead) {
+  return getTaskTextField(lead.task_status, 'Pending')
+}
+
+function getTaskPriority(lead: Lead) {
+  return getTaskTextField(lead.task_priority, 'Medium')
+}
+
+function getTaskPriorityWeight(priority: string) {
+  if (priority === 'High') {
+    return 3
+  }
+
+  if (priority === 'Medium') {
+    return 2
+  }
+
+  return 1
+}
+
+function getTaskPriorityBadgeTone(priority: string): 'red' | 'yellow' | 'gray' | 'blue' | 'green' {
+  if (priority === 'High') {
+    return 'red'
+  }
+
+  if (priority === 'Medium') {
+    return 'yellow'
+  }
+
+  return 'gray'
+}
+
+function getTaskStatusBadgeTone(status: string): 'red' | 'yellow' | 'gray' | 'blue' | 'green' {
+  if (status === 'Completed') {
+    return 'green'
+  }
+
+  return 'blue'
+}
+
+function isTaskDueToday(lead: Lead) {
+  const dueAt = parseSupabaseTimestamp(lead.task_due_at)
+
+  return dueAt !== null && getTorontoDateKey(dueAt) === getTorontoDateKey(new Date())
+}
+
+function isTaskOverdue(lead: Lead) {
+  const dueAt = parseSupabaseTimestamp(lead.task_due_at)
+
+  return dueAt !== null && dueAt.getTime() < Date.now()
+}
+
+function addHours(date: Date, hours: number) {
+  return new Date(date.getTime() + hours * 60 * 60 * 1000)
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000)
 }
 
 function buildDashboardAnalytics(
